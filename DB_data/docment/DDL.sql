@@ -163,25 +163,72 @@ CREATE INDEX IF NOT EXISTS ix_ps_corpno ON project_spending(corporate_number);
 CREATE INDEX IF NOT EXISTS ix_ps_method ON project_spending(contract_method);
 
 
--- tag table
-CREATE TABLE IF NOT EXISTS tag (
-  tag_id     BIGSERIAL PRIMARY KEY,
-  tag_detail VARCHAR(255) NOT NULL UNIQUE
+
+-- genre table
+CREATE TABLE IF NOT EXISTS genre (
+  genre_id   BIGSERIAL PRIMARY KEY,
+  genre_name VARCHAR(255) NOT NULL UNIQUE
 );
 
--- project_tag table
-CREATE TABLE IF NOT EXISTS project_tag (
-  project_id  SMALLINT NOT NULL,
-  budget_year SMALLINT NOT NULL,
-  tag_id      BIGINT   NOT NULL,
+-- project_genre table
+CREATE TABLE IF NOT EXISTS project_genre (
+  project_id    SMALLINT NOT NULL,
+  budget_year   SMALLINT NOT NULL,
+  genre_id      BIGINT   NOT NULL,
 
-  CONSTRAINT pk_project_tag PRIMARY KEY (project_id, budget_year, tag_id),
+  CONSTRAINT pk_project_genre PRIMARY KEY (project_id, budget_year, genre_id),
+
+  CONSTRAINT fk_pg_project
+    FOREIGN KEY (project_id, budget_year) REFERENCES project(project_id, budget_year)
+      ON UPDATE RESTRICT ON DELETE RESTRICT,
+
+  CONSTRAINT fk_pg_genre
+    FOREIGN KEY (genre_id) REFERENCES genre(genre_id)
+      ON UPDATE RESTRICT ON DELETE RESTRICT
+);
+
+-- target table
+CREATE TABLE IF NOT EXISTS target (
+  target_id   BIGSERIAL PRIMARY KEY,
+  target_name VARCHAR(255) NOT NULL UNIQUE
+);
+
+-- project_target table
+CREATE TABLE IF NOT EXISTS project_target (
+  project_id    SMALLINT NOT NULL,
+  budget_year   SMALLINT NOT NULL,
+  target_id     BIGINT   NOT NULL,
+
+  CONSTRAINT pk_project_target PRIMARY KEY (project_id, budget_year, target_id),
 
   CONSTRAINT fk_pt_project
     FOREIGN KEY (project_id, budget_year) REFERENCES project(project_id, budget_year)
       ON UPDATE RESTRICT ON DELETE RESTRICT,
 
-  CONSTRAINT fk_pt_tag
-    FOREIGN KEY (tag_id) REFERENCES tag(tag_id)
+  CONSTRAINT fk_pt_target
+    FOREIGN KEY (target_id) REFERENCES target(target_id)
+      ON UPDATE RESTRICT ON DELETE RESTRICT
+);
+
+-- region table
+CREATE TABLE IF NOT EXISTS region (
+  region_id   BIGSERIAL PRIMARY KEY,
+  region_name VARCHAR(255) NOT NULL UNIQUE
+);
+
+-- project_region table
+CREATE TABLE IF NOT EXISTS project_region (
+  project_id    SMALLINT NOT NULL,
+  budget_year   SMALLINT NOT NULL,
+  region_id     BIGINT   NOT NULL,
+
+  CONSTRAINT pk_project_region PRIMARY KEY (project_id, budget_year, region_id),
+
+  CONSTRAINT fk_pr_project
+    FOREIGN KEY (project_id, budget_year) REFERENCES project(project_id, budget_year)
+      ON UPDATE RESTRICT ON DELETE RESTRICT,
+
+  CONSTRAINT fk_pr_region
+    FOREIGN KEY (region_id) REFERENCES region(region_id)
       ON UPDATE RESTRICT ON DELETE RESTRICT
 );
