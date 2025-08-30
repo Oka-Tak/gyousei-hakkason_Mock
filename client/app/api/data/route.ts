@@ -17,20 +17,32 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 export async function GET() {
   try {
     // projectデータ取得（ASは使わず、JS側でリネーム）
+    // 2024年度のデータのみに絞って500件取得
     const { data: projects, error: projectError } = await supabase
       .from('project')
-      .select('budget_year, project_year, organization_id, initial_budget_total, adjustment_total, carryover_from_previous_total, contingency_total');
+      .select('budget_year, project_year, organization_id, initial_budget_total, adjustment_total, carryover_from_previous_total, contingency_total')
+      .eq('budget_year', 2024)
+      .limit(2000);
     if (projectError) throw projectError;
 
-    // organization, agency情報を取得
+    // 取得したprojectに関連するorganization_idのみを抽出
+    const organizationIds = [...new Set(projects?.map(p => p.organization_id).filter(Boolean))];
+    
+    // 必要なorganizationデータのみ取得
     const { data: organizations, error: orgError } = await supabase
       .from('organization')
-      .select('*');
+      .select('*')
+      .in('organization_id', organizationIds);
     if (orgError) throw orgError;
 
+    // 必要なagency_idのみを抽出
+    const agencyIds = [...new Set(organizations?.map(o => o.agency_id).filter(Boolean))];
+    
+    // 必要なagencyデータのみ取得
     const { data: agencies, error: agencyError } = await supabase
       .from('agency')
-      .select('*');
+      .select('*')
+      .in('agency_id', agencyIds);
     if (agencyError) throw agencyError;
 
 
@@ -43,7 +55,7 @@ export async function GET() {
     // kuromojiでname→yomi変換
     if (!tokenizerCache) {
       if (!tokenizerReady) {
-        tokenizerReady = new Promise((resolve, reject) => {
+        tokenizerReady = new Promise((resolve) => {
           const builder = kuromoji.builder({ dicPath: 'node_modules/kuromoji/dict/' });
           builder.build((err: any, tokenizer: any) => {
             if (err) {
