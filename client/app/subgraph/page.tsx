@@ -87,8 +87,14 @@ function SubgraphContent() {
 
   useEffect(() => {
     const fetchData = async () => {
+      if (!nodeId) {
+        setError("ノードIDが指定されていません");
+        setLoading(false);
+        return;
+      }
+      
       try {
-        const response = await fetch("/api/subgraph");
+        const response = await fetch(`/api/subgraph?node=${encodeURIComponent(nodeId)}`);
         if (!response.ok) throw new Error("データ取得失敗");
         const merged = await response.json();
         setData(merged);
@@ -100,7 +106,7 @@ function SubgraphContent() {
       }
     };
     fetchData();
-  }, []);
+  }, [nodeId]);
 
   // Spotlightショートカット
   useEffect(() => {
