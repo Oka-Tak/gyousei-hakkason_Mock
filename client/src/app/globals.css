@@ -1,0 +1,77 @@
+/* レスポンシブ対応: ビューポート設定 */
+@media (max-width: 600px) {
+  html {
+    font-size: 15px;
+  }
+  body {
+    font-size: 15px;
+    padding: 0 2vw;
+  }
+  svg {
+    width: 100vw !important;
+    height: 60vh !important;
+    min-width: 0 !important;
+    max-width: 100vw !important;
+  }
+  .tooltip {
+    font-size: 13px !important;
+    max-width: 90vw !important;
+    word-break: break-all;
+  }
+  .node-group text {
+    font-size: 12px !important;
+  }
+  /* .node-group circle の r: 12 !important; はSVG属性としては効かないため削除 */
+  .backButton {
+    top: 10px !important;
+    left: 10px !important;
+    font-size: 14px !important;
+    padding: 7px 10px !important;
+  }
+}
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  user-select: none; /* Prevent text selection */
+  -webkit-user-select: none; /* Safari */
+  -moz-user-select: none; /* Firefox */
+  -ms-user-select: none; /* IE 10+ */
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  html {
+    color-scheme: dark;
+  }
+}
