@@ -161,3 +161,27 @@ CREATE TABLE IF NOT EXISTS project_spending (
 CREATE INDEX IF NOT EXISTS ix_ps_project ON project_spending(project_id, budget_year);
 CREATE INDEX IF NOT EXISTS ix_ps_corpno ON project_spending(corporate_number);
 CREATE INDEX IF NOT EXISTS ix_ps_method ON project_spending(contract_method);
+
+
+-- tag table
+CREATE TABLE IF NOT EXISTS tag (
+  tag_id     BIGSERIAL PRIMARY KEY,
+  tag_detail VARCHAR(255) NOT NULL UNIQUE
+);
+
+-- project_tag table
+CREATE TABLE IF NOT EXISTS project_tag (
+  project_id  SMALLINT NOT NULL,
+  budget_year SMALLINT NOT NULL,
+  tag_id      BIGINT   NOT NULL,
+
+  CONSTRAINT pk_project_tag PRIMARY KEY (project_id, budget_year, tag_id),
+
+  CONSTRAINT fk_pt_project
+    FOREIGN KEY (project_id, budget_year) REFERENCES project(project_id, budget_year)
+      ON UPDATE RESTRICT ON DELETE RESTRICT,
+
+  CONSTRAINT fk_pt_tag
+    FOREIGN KEY (tag_id) REFERENCES tag(tag_id)
+      ON UPDATE RESTRICT ON DELETE RESTRICT
+);
