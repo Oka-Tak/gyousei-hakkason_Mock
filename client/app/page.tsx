@@ -115,20 +115,6 @@ const ForceDirectedGraph: React.FC = () => {
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
-  // レスポンシブ: 画面幅を取得しモード出力
-  useEffect(() => {
-    const checkMobile = () => {
-      const mobile = window.innerWidth <= 600;
-      if (mobile) {
-        console.log('[レスポンシブ] モバイルモード');
-      } else {
-        console.log('[レスポンシブ] PCモード');
-      }
-    };
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const zoomRef = useRef<d3.ZoomBehavior<Element, unknown> | null>(null);
   const [zoomTransform, setZoomTransform] = useState<d3.ZoomTransform | null>(null);
@@ -138,6 +124,7 @@ const ForceDirectedGraph: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [focusedNode, setFocusedNode] = useState<Node | null>(null);
+  const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   // Spotlight風検索UI
   const [showSpotlight, setShowSpotlight] = useState(false);
   const [search, setSearch] = useState('');
@@ -686,9 +673,15 @@ const ForceDirectedGraph: React.FC = () => {
           .on('end', function() { d3.select(this).style('pointer-events', 'none'); });
       })
       .on('click', (event, d) => {
-        // サブグラフページへ遷移
-        window.location.href = `/subgraph?node=${encodeURIComponent(d.id)}`;
-        event.stopPropagation();
+        if (isMobile) {
+          // モバイルでは詳細表示
+          setSelectedNode(d);
+          event.stopPropagation();
+        } else {
+          // PCではサブグラフページへ遷移
+          window.location.href = `/subgraph?node=${encodeURIComponent(d.id)}`;
+          event.stopPropagation();
+        }
       });
 
     // ハイライトをクリアする関数
@@ -699,7 +692,10 @@ const ForceDirectedGraph: React.FC = () => {
     };
 
     // SVG背景をクリックした際にハイライトをクリア
-    svg.on('click', clearHighlights);
+    svg.on('click', () => {
+      clearHighlights();
+      setSelectedNode(null);
+    });
 
     simulation.on('tick', () => {
       link
@@ -737,8 +733,124 @@ const ForceDirectedGraph: React.FC = () => {
 
   }, [data, visibleAgencies]);
 
-  if (loading) return <div>Loading data...</div>;
-  if (error) return <div>Error: {error}</div>;
+  if (loading) return (
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'center',
+      alignItems: 'center',
+      height: '100vh',
+      width: '100vw',
+      background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+    }}>
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 24
+      }}>
+        <h1 style={{
+          fontSize: 32,
+          fontWeight: 700,
+          color: '#07796b',
+          margin: 0,
+          letterSpacing: '0.05em'
+        }}>ZAIMYAKU</h1>
+        
+        <div style={{
+          display: 'flex',
+          gap: 8,
+          alignItems: 'center'
+        }}>
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              style={{
+                width: 12,
+                height: 12,
+                borderRadius: '50%',
+                backgroundColor: '#07796b',
+                animation: `pulse 1.5s infinite ${i * 0.2}s`
+              }}
+            />
+          ))}
+        </div>
+        
+        <p style={{
+          fontSize: 16,
+          color: '#64748b',
+          margin: 0,
+          textAlign: 'center'
+        }}>データを読み込んでいます...</p>
+      </div>
+      
+      <style jsx>{`
+        @keyframes pulse {
+          0%, 100% {
+            transform: scale(1);
+            opacity: 0.7;
+          }
+          50% {
+            transform: scale(1.3);
+            opacity: 1;
+          }
+        }
+      `}</style>
+    </div>
+  );
+  
+  if (error) return (
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'center',
+      alignItems: 'center',
+      height: '100vh',
+      width: '100vw',
+      background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+    }}>
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 16,
+        padding: 32,
+        background: 'white',
+        borderRadius: 16,
+        boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
+        maxWidth: 400
+      }}>
+        <div style={{ fontSize: 48 }}>⚠️</div>
+        <h2 style={{
+          fontSize: 20,
+          fontWeight: 600,
+          color: '#dc2626',
+          margin: 0
+        }}>エラーが発生しました</h2>
+        <p style={{
+          fontSize: 14,
+          color: '#64748b',
+          margin: 0,
+          textAlign: 'center'
+        }}>{error}</p>
+        <button
+          onClick={() => window.location.reload()}
+          style={{
+            background: '#07796b',
+            color: 'white',
+            border: 'none',
+            borderRadius: 8,
+            padding: '10px 20px',
+            fontSize: 14,
+            fontWeight: 600,
+            cursor: 'pointer'
+          }}
+        >再読み込み</button>
+      </div>
+    </div>
+  );
 
   return (
     <div style={{ width: '100vw', height: isMobile ? '100dvh' : '100vh', margin: 0, padding: 0, overflow: 'hidden', position: 'relative' }}>
@@ -771,7 +883,7 @@ const ForceDirectedGraph: React.FC = () => {
           padding: '8px 0',
         }}
       >
-        <h1 style={{ margin: 0, fontSize: isMobile ? 17 : 24, flex: 'none', color: '#333', background: 'rgba(255,255,255,0.8)' }}>行政事業レビュー見える化サイト</h1>
+        <h1 style={{ margin: 0, fontSize: isMobile ? 17 : 24, flex: 'none', color: '#333', background: 'rgba(255,255,255,0.8)' }}>ZAIMYAKU</h1>
         <button
           style={isMobile ? {
             marginTop: 2,
@@ -796,6 +908,32 @@ const ForceDirectedGraph: React.FC = () => {
           onClick={() => setShowSpotlight(true)}
           aria-label="検索を開く"
         >🔍 検索</button>
+        <button
+          style={isMobile ? {
+            marginTop: 2,
+            background: '#07796b',
+            color: 'white',
+            border: 'none',
+            borderRadius: 8,
+            padding: '6px 16px',
+            fontSize: 15,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+            cursor: 'pointer',
+            alignSelf: 'center',
+          } : {
+            marginLeft: 24,
+            background: '#07796b',
+            color: 'white',
+            border: 'none',
+            borderRadius: 8,
+            padding: '8px 20px',
+            fontSize: 18,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+            cursor: 'pointer',
+          }}
+          onClick={() => window.location.href = '/landing'}
+          aria-label="サービス紹介ページを開く"
+        >サービス紹介</button>
       </div>
       {/* 省庁ごとの表示・非表示コントロール */}
       <div style={isMobile ? {
@@ -877,9 +1015,68 @@ const ForceDirectedGraph: React.FC = () => {
           <div style={{ marginTop: 4, color: '#444' }}>予算額: {focusedNode.initial_budget ? Number(focusedNode.initial_budget).toLocaleString() + '円' : 'データなし'}</div>
         </div>
       )}
+      {/* 選択されたノードの詳細表示（モバイル用） */}
+      {selectedNode && isMobile && (
+        <div style={{
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          background: '#fff',
+          borderTop: '1px solid #ccc',
+          borderRadius: '12px 12px 0 0',
+          padding: '16px',
+          zIndex: 102,
+          maxHeight: '50vh',
+          overflowY: 'auto',
+          boxShadow: '0 -4px 16px rgba(0,0,0,0.1)'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+            <h3 style={{ margin: 0, fontSize: 18, color: '#333' }}>{selectedNode.name}</h3>
+            <button
+              onClick={() => setSelectedNode(null)}
+              style={{
+                background: 'none',
+                border: 'none',
+                fontSize: 24,
+                cursor: 'pointer',
+                padding: 4,
+                color: '#666'
+              }}
+            >×</button>
+          </div>
+          <div style={{ fontSize: 14, color: '#666', marginBottom: 8 }}>
+            階層: {selectedNode.group === 'agency_name' ? '政策所管府省庁' : 
+                  selectedNode.group === 'ministry_name' ? '省庁' :
+                  selectedNode.group === 'bureau_agency' ? '局・庁' :
+                  selectedNode.group === 'department' ? '部' :
+                  selectedNode.group === 'division' ? '課' :
+                  selectedNode.group === 'office' ? '係' :
+                  selectedNode.group === 'section' ? '班' :
+                  selectedNode.group === 'group' ? '室' :
+                  selectedNode.group === 'team' ? 'チーム' : selectedNode.group}
+          </div>
+          <div style={{ fontSize: 14, color: '#333', marginBottom: 12 }}>
+            予算額: {selectedNode.initial_budget ? Number(selectedNode.initial_budget).toLocaleString() + '円' : 'データなし'}
+          </div>
+          <button
+            onClick={() => window.location.href = `/subgraph?node=${encodeURIComponent(selectedNode.id)}`}
+            style={{
+              background: '#007bff',
+              color: 'white',
+              border: 'none',
+              borderRadius: 8,
+              padding: '10px 16px',
+              fontSize: 14,
+              cursor: 'pointer',
+              width: '100%'
+            }}
+          >サブグラフで詳細を見る</button>
+        </div>
+      )}
       {/* --- Spotlight風検索UI --- */}
       {showSpotlight && (
-        <div className={styles.spotlightContainer} style={{ position: 'absolute', top: 80, left: '50%', transform: 'translateX(-50%)', zIndex: 100 }}>
+        <div className={styles.spotlightContainer} style={{ position: 'absolute', top: isMobile ? 70 : 80, left: '50%', transform: 'translateX(-50%)', zIndex: 100 }}>
           <input
             autoFocus
             type="text"
@@ -938,7 +1135,7 @@ const ForceDirectedGraph: React.FC = () => {
           )}
         </div>
       )}
-  <svg ref={svgRef} style={{ position: 'absolute', top: isMobile ? 56 : 0, left: 0, zIndex: 1, width: isMobile ? '100vw' : '100vw', height: isMobile ? '60vh' : '100vh', minWidth: isMobile ? 0 : undefined, maxWidth: isMobile ? '100vw' : undefined }}></svg>
+  <svg ref={svgRef} style={{ position: 'absolute', top: isMobile ? 56 : 0, left: 0, zIndex: 1, width: '100vw', height: isMobile ? 'calc(100vh - 56px)' : '100vh' }}></svg>
       {/* --- ズーム・リセットボタン --- */}
   <div style={{ position: 'absolute', left: isMobile ? 10 : 20, bottom: isMobile ? 10 : 20, zIndex: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
         <button
