@@ -6,7 +6,7 @@ BLOCK_CSV = 'converted_data/converted_project_spending_block.csv'
 # 出力ファイル
 OUTPUT_CSV = 'project_spending_import.csv'
 
-# block_idを自動採番し、project_id, budget_year, block_noで紐付ける辞書を作成
+# block_idを自動採番し、project_id, budget_year, block_noで紐付ける辞書を作成する
 block_dict = {}
 with open(BLOCK_CSV, encoding='utf-8') as f:
     reader = csv.DictReader(f)
@@ -60,3 +60,4 @@ with open(SPENDING_CSV, encoding='utf-8') as fin, \
         writer.writerow(out_row)
 
 print(f'CSV出力完了: {OUTPUT_CSV}')
+
