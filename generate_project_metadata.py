@@ -4,21 +4,32 @@ import os
 import json
 
 # Configure Gemini API (replace with your actual API key or environment variable)
-# It's recommended to set this as an environment variable: export GEMINI_API_KEY='your_api_key'
-genai.configure(api_key=os.environ.get("AIzaSyB9IkAJFnmEyizT_8nNKQkpiEjFt7eUka8"))
+# It's recommended to set this as an environment variable: export GOOGLE_API_KEY='your_api_key'
+genai.configure(api_key="AIzaSyCn9VuHWdwSCh6ilWaBoMbtarWkzj7qhCE")
 
 def get_gemini_response(prompt_text):
     """
     Sends a prompt to the Gemini API and returns the parsed JSON response.
     """
+    print(f"Sending prompt to Gemini API...")
+    print(f"Prompt: {prompt_text}")
+    
     model = genai.GenerativeModel('gemini-2.5-flash')
     try:
         response = model.generate_content(prompt_text)
+        print(f"Raw Gemini response: {response.text}")
+        
         # Extract JSON string from markdown code block if present
         response_text = response.text.strip()
         if response_text.startswith("```json") and response_text.endswith("```"):
             response_text = response_text[len("```json"): -len("```")].strip()
-        return json.loads(response_text)
+        
+        print(f"Processed response text: {response_text}")
+        
+        parsed_response = json.loads(response_text)
+        print(f"Successfully parsed JSON: {parsed_response}")
+        return parsed_response
+        
     except json.JSONDecodeError as e:
         print(f"JSON Decode Error from Gemini API: {e}")
         print(f"Raw Gemini response: {response.text}")
@@ -68,16 +79,14 @@ def generate_metadata_program(input_csv_path):
     write_header_if_empty(region_file, "id,name")
     write_header_if_empty(project_region_file, "project_id,region_id")
 
-    print(f"Reading input CSV: {input_csv_path}")
-    df = pd.read_csv(input_csv_path)
-    print(f"Successfully read {len(df)} rows from {input_csv_path}")
-
     print("Starting to process each project entry...")
     for index, row in df.iterrows():
         project_id = row["予算事業ID"]
         purpose = row["事業の目的"]
         challenges = row["現状・課題"]
-        print(f"Processing Project ID: {project_id}")
+        print(f"\n=== Processing Project ID: {project_id} ===")
+        print(f"Purpose: {purpose}")
+        print(f"Challenges: {challenges}")
 
         combined_text = f"事業の目的: {purpose}\n現状・課題: {challenges}"
         prompt = f"""以下の事業の目的と現状・課題から、関連する「ジャンル (genres)」、「対象 (targets)」、「地域 (regions)」を抽出してください。
@@ -90,6 +99,7 @@ def generate_metadata_program(input_csv_path):
         max_retries = 3
         gemini_output = None
         for attempt in range(max_retries):
+            print(f"Attempt {attempt + 1}/{max_retries} for Project ID: {project_id}")
             gemini_output = get_gemini_response(prompt)
             if gemini_output:
                 print(f"Successfully received Gemini response for Project ID: {project_id}")
@@ -106,7 +116,9 @@ def generate_metadata_program(input_csv_path):
                         all_genres[genre_name] = genre_id_counter
                         g_f.write(f"{genre_id_counter},{genre_name}\n")
                         genre_id_counter += 1
+                        print(f"Added new genre: {genre_name} (ID: {all_genres[genre_name]})")
                     pg_f.write(f"{project_id},{all_genres[genre_name]}\n")
+                    print(f"Linked project {project_id} to genre {genre_name}")
 
             print(f"Processing targets for Project ID: {project_id}")
             # Process Targets
@@ -117,7 +129,9 @@ def generate_metadata_program(input_csv_path):
                         all_targets[target_name] = target_id_counter
                         t_f.write(f"{target_id_counter},{target_name}\n")
                         target_id_counter += 1
+                        print(f"Added new target: {target_name} (ID: {all_targets[target_name]})")
                     pt_f.write(f"{project_id},{all_targets[target_name]}\n")
+                    print(f"Linked project {project_id} to target {target_name}")
 
             print(f"Processing regions for Project ID: {project_id}")
             # Process Regions
@@ -128,10 +142,14 @@ def generate_metadata_program(input_csv_path):
                         all_regions[region_name] = region_id_counter
                         r_f.write(f"{region_id_counter},{region_name}\n")
                         region_id_counter += 1
+                        print(f"Added new region: {region_name} (ID: {all_regions[region_name]})")
                     pr_f.write(f"{project_id},{all_regions[region_name]}\n")
+                    print(f"Linked project {project_id} to region {region_name}")
+        else:
+            print(f"Failed to get valid response from Gemini API for Project ID: {project_id}")
 
     print(f"All CSVs generated successfully in {output_dir}.")
 
 if __name__ == "__main__":
-    input_file = "source_data/source_test_data/1-2_mock.csv"
+    input_file = "source_data/1-2.csv"
     generate_metadata_program(input_file)
