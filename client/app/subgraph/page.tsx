@@ -845,7 +845,7 @@ function SubgraphContent() {
             <div style={{ margin: '8px 0' }}>
               {String(focusedNode.project_id || '').length > 0 ? (
                 <a
-                  href={`https://rssystem.go.jp/project?projectNumbers=${focusedNode.project_id}`}
+                  href={`https://rssystem.go.jp/project?projectNumbers=${focusedNode.project_id}&fiscalYear=2024`}
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{ color: '#1976d2', textDecoration: 'underline', fontWeight: 'bold' }}
