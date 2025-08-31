@@ -232,10 +232,9 @@ function SubgraphContent() {
     });
     setLimitedNodesState(nodes);
     // D3描画
-    // レスポンシブ: SVGサイズ調整
-  // モバイル時は高さを抑えめに
-  const width = isMobile ? window.innerWidth : window.innerWidth;
-  const height = isMobile ? window.innerHeight * 0.6 : window.innerHeight;
+      // レスポンシブ: SVGサイズ調整
+    const width = window.innerWidth;
+    const height = isMobile ? window.innerHeight - 120 : window.innerHeight;
     const svg = d3.select(svgRef.current)
       .attr("width", width)
       .attr("height", height)
@@ -478,8 +477,139 @@ function SubgraphContent() {
     }, 1000);
   }, [showSpotlight, hitIndexes, currentHit, limitedNodesState]);
 
-  if (loading) return <div>Loading...</div>;
-  if (error) return <div>Error: {error}</div>;
+  if (loading) return (
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'center',
+      alignItems: 'center',
+      height: '100vh',
+      width: '100vw',
+      background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+    }}>
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 24
+      }}>
+        <h1 style={{
+          fontSize: 32,
+          fontWeight: 700,
+          color: '#07796b',
+          margin: 0,
+          letterSpacing: '0.05em'
+        }}>ZAIMYAKU</h1>
+        
+        <div style={{
+          display: 'flex',
+          gap: 8,
+          alignItems: 'center'
+        }}>
+          {[0, 1, 2, 3].map((i) => (
+            <div
+              key={i}
+              style={{
+                width: 10,
+                height: 10,
+                borderRadius: '50%',
+                backgroundColor: '#07796b',
+                animation: `bounce 1.4s infinite ${i * 0.15}s`
+              }}
+            />
+          ))}
+        </div>
+        
+        <p style={{
+          fontSize: 16,
+          color: '#64748b',
+          margin: 0,
+          textAlign: 'center'
+        }}>サブグラフを構築中...</p>
+      </div>
+      
+      <style jsx>{`
+        @keyframes bounce {
+          0%, 100% {
+            transform: translateY(0);
+            opacity: 0.6;
+          }
+          50% {
+            transform: translateY(-10px);
+            opacity: 1;
+          }
+        }
+      `}</style>
+    </div>
+  );
+  
+  if (error) return (
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'center',
+      alignItems: 'center',
+      height: '100vh',
+      width: '100vw',
+      background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+    }}>
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 16,
+        padding: 32,
+        background: 'white',
+        borderRadius: 16,
+        boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
+        maxWidth: 400
+      }}>
+        <div style={{ fontSize: 48 }}>❌</div>
+        <h2 style={{
+          fontSize: 20,
+          fontWeight: 600,
+          color: '#dc2626',
+          margin: 0
+        }}>データ取得エラー</h2>
+        <p style={{
+          fontSize: 14,
+          color: '#64748b',
+          margin: 0,
+          textAlign: 'center'
+        }}>{error}</p>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              background: '#07796b',
+              color: 'white',
+              border: 'none',
+              borderRadius: 8,
+              padding: '10px 20px',
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+          >再試行</button>
+          <button
+            onClick={() => window.history.back()}
+            style={{
+              background: 'transparent',
+              color: '#64748b',
+              border: '1px solid #e2e8f0',
+              borderRadius: 8,
+              padding: '10px 20px',
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+          >戻る</button>
+        </div>
+      </div>
+    </div>
+  );
   return (
     <div style={{ width: '100vw', height: '100vh', margin: 0, padding: 0, overflow: 'hidden', position: 'relative' }}>
       {/* --- タイトル・検索・戻るボタンのレイアウト --- */}
@@ -494,8 +624,8 @@ function SubgraphContent() {
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          gap: 6,
-          padding: '8px 0 2px 0',
+          gap: 8,
+          padding: '12px 0 8px 0',
         } : {
           position: 'absolute',
           top: 0,
@@ -511,7 +641,7 @@ function SubgraphContent() {
           padding: '8px 0',
         }}
       >
-        <h2 style={{ margin: 0, fontSize: isMobile ? 17 : 22, flex: 'none' }}>サブグラフ（事業名まで表示）</h2>
+        <h2 style={{ margin: 0, fontSize: isMobile ? 17 : 22, flex: 'none' }}>ZAIMYAKU - サブグラフ</h2>
         <button
           style={isMobile ? {
             marginTop: 2,
@@ -555,7 +685,7 @@ function SubgraphContent() {
       </div>
       {/* --- Spotlight風検索UI --- */}
       {showSpotlight && (
-        <div className={spotlightStyles.spotlightContainer} style={{ position: 'absolute', top: 80, left: '50%', transform: 'translateX(-50%)', zIndex: 100 }}>
+        <div className={spotlightStyles.spotlightContainer} style={{ position: 'absolute', top: isMobile ? 85 : 80, left: '50%', transform: 'translateX(-50%)', zIndex: 100 }}>
           <input
             autoFocus
             type="text"
@@ -613,7 +743,7 @@ function SubgraphContent() {
           )}
         </div>
       )}
-  <svg ref={svgRef} style={{ position: 'absolute', top: isMobile ? 56 : 0, left: 0, zIndex: 1 }}></svg>
+  <svg ref={svgRef} style={{ position: 'absolute', top: isMobile ? 100 : 0, left: 0, zIndex: 1, width: '100vw', height: isMobile ? 'calc(100vh - 100px)' : '100vh' }}></svg>
       {/* --- ズーム・リセットボタン --- */}
   <div style={{ position: 'absolute', left: 20, bottom: 20, zIndex: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
         <button
@@ -640,8 +770,8 @@ function SubgraphContent() {
             if (svgRef.current && zoomRef.current) {
               // 注目ノード(node=...)があればその座標を画面中央に
               const svg = svgRef.current as unknown as Element;
-              const w = isMobile ? window.innerWidth : window.innerWidth;
-              const h = isMobile ? window.innerHeight * 0.6 : window.innerHeight;
+              const w = window.innerWidth;
+              const h = isMobile ? window.innerHeight - 120 : window.innerHeight;
               let targetNode = null;
               if (limitedNodesState && limitedNodesState.length > 0 && nodeId) {
                 targetNode = limitedNodesState.find(n => n.id === nodeId);
@@ -668,14 +798,54 @@ function SubgraphContent() {
         >⦿</button>
       </div>
       {focusedNode && (
-        <div style={{ position: 'absolute', top: 60, right: 20, zIndex: 3, background: '#fff', border: '1px solid #ccc', padding: '10px', minWidth: 320 }}>
-          <h2>フォーカス中のノード: {focusedNode.name}</h2>
+        <div style={isMobile ? {
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          background: '#fff',
+          borderTop: '1px solid #ccc',
+          borderRadius: '12px 12px 0 0',
+          padding: '16px',
+          zIndex: 102,
+          maxHeight: '60vh',
+          overflowY: 'auto',
+          boxShadow: '0 -4px 16px rgba(0,0,0,0.1)'
+        } : {
+          position: 'absolute',
+          top: 60,
+          right: 20,
+          zIndex: 3,
+          background: '#fff',
+          border: '1px solid #ccc',
+          padding: '10px',
+          minWidth: 320,
+          maxWidth: 400,
+          borderRadius: 8,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+            <h2 style={{ margin: 0, fontSize: isMobile ? 18 : 20 }}>フォーカス中のノード: {focusedNode.name}</h2>
+            {isMobile && (
+              <button
+                onClick={() => setFocusedNode(null)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: 24,
+                  cursor: 'pointer',
+                  padding: 4,
+                  color: '#666'
+                }}
+              >×</button>
+            )}
+          </div>
           {/* 事業ノードのときはproject_idがなくてもレビューシートURL欄を必ず表示 */}
           {focusedNode.group === 'project_name' && (
             <div style={{ margin: '8px 0' }}>
               {String(focusedNode.project_id || '').length > 0 ? (
                 <a
-                  href={`https://rssystem.go.jp/project?projectNumbers=${focusedNode.project_id}`}
+                  href={`https://rssystem.go.jp/project?projectNumbers=${focusedNode.project_id}&fiscalYear=2024`}
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{ color: '#1976d2', textDecoration: 'underline', fontWeight: 'bold' }}
@@ -695,7 +865,7 @@ function SubgraphContent() {
             {/* 支払先企業一覧 */}
             <div>
               <strong>支払先企業一覧:</strong>
-              <ul style={{ margin: '6px 0 0 0', padding: 0, listStyle: 'none', maxHeight: 120, overflowY: 'auto', fontSize: 14 }}>
+              <ul style={{ margin: '6px 0 0 0', padding: 0, listStyle: 'none', maxHeight: isMobile ? 150 : 120, overflowY: 'auto', fontSize: isMobile ? 13 : 14 }}>
                 {(focusedNode.spending_list && focusedNode.spending_list.length > 0) ? (
                   focusedNode.spending_list.map((sp: any, idx: number) => (
                     <li key={idx} style={{ borderBottom: '1px solid #eee', padding: '2px 0' }}>
