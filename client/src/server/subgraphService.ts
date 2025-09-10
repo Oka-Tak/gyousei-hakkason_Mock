@@ -25,7 +25,7 @@ export async function fetchSubgraph(nodeId: string, opts?: { projectLimit?: numb
   // 2) filter organizations by tail path
   let orgQuery = supabase
     .from('organization')
-    .select('organization_id, agency_id, bureau_office, department, division, unit, section, "group", team')
+    .select('organization_id, agency_id, bureau_office, department, division, unit, section, team')
     .in('agency_id', agencyIds);
   for (let i = 0; i < tail.length && i < ORG_FIELD_ORDER.length; i++) {
     const value = tail[i];
@@ -103,7 +103,7 @@ export async function fetchSubgraph(nodeId: string, opts?: { projectLimit?: numb
       division: org.division,
       office: org.unit,
       section: org.section,
-      group: org.group,
+      group: null,
       team: org.team,
       review_sheet_url: proj.review_sheet_url || '',
       initial_budget_total,
