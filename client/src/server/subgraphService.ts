@@ -16,7 +16,7 @@ export async function fetchSubgraph(nodeId: string, opts?: { projectLimit?: numb
   // 1) resolve agency
   const { data: agencies, error: agencyError } = await supabase
     .from('agency')
-    .select('agency_id, agency_name, ministry_name, agency_order')
+    .select('agency_id, agency_name, agency_order')
     .eq('agency_name', topLevelOrg);
   if (agencyError) throw agencyError;
   if (!agencies?.length) return [];
@@ -97,7 +97,7 @@ export async function fetchSubgraph(nodeId: string, opts?: { projectLimit?: numb
       agency_id: ag.agency_id,
       agency_name: ag.agency_name,
       agency_order: ag.agency_order,
-      ministry_name: ag.ministry_name || ag.agency_name,
+      ministry_name: ag.agency_name,
       bureau_agency: org.bureau_office,
       department: org.department,
       division: org.division,
