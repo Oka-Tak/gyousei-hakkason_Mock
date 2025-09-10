@@ -1,19 +1,28 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { z } from 'zod';
+import { RawProjectDataSchema } from '../../src/types/schemas';
 
 const supabaseUrl = process.env.SUPABASE_URL!;
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+// 入力スキーマの定義
+const SubgraphInputSchema = z.object({
+  node: z.string().min(1, 'node parameter is required'),
+});
+
 export async function GET(request: Request) {
   try {
     // URLパラメータからnodeIdを取得
     const { searchParams } = new URL(request.url);
-    const nodeId = searchParams.get('node');
-    
-    if (!nodeId) {
-      return NextResponse.json({ error: 'node parameter is required' }, { status: 400 });
+    const input = SubgraphInputSchema.safeParse({ node: searchParams.get('node') });
+
+    if (!input.success) {
+      return NextResponse.json({ error: input.error.errors }, { status: 400 });
     }
+
+    const nodeId = input.data.node;
 
     // nodeIdを分解して組織階層を特定
     const hierarchyParts = decodeURIComponent(nodeId).split('→');
@@ -133,7 +142,15 @@ export async function GET(request: Request) {
       };
     });
     
-    return NextResponse.json(merged);
+    // 出力データの検証
+    const validatedMerged = z.array(RawProjectDataSchema).safeParse(merged);
+
+    if (!validatedMerged.success) {
+      console.error('Subgraph API output validation error:', validatedMerged.error);
+      return NextResponse.json({ error: 'Internal server error: Invalid data format' }, { status: 500 });
+    }
+
+    return NextResponse.json(validatedMerged.data);
   } catch (error: unknown) {
     console.error('Subgraph API error:', error);
     return NextResponse.json({ error: error instanceof Error ? error.message : String(error) }, { status: 500 });

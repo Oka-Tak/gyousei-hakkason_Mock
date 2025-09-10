@@ -2,15 +2,8 @@
 
 import React, { Suspense, useEffect, useRef, useState } from "react";
 import { RawProjectData, SpendingItem } from '../../src/types';
+import { isRawProjectData } from "../../src/types/guards";
 import Fuse from 'fuse.js';
-
-// 型ガード関数
-function isRawProjectData(item: any): item is RawProjectData {
-  return typeof item === 'object' && 
-         (typeof item.project_id === 'string' || item.project_id === undefined) &&
-         (typeof item.agency_name === 'string' || item.agency_name === undefined) &&
-         (typeof item.ministry_name === 'string' || item.ministry_name === undefined);
-}
 // d3は既にimport済み
 // メイングラフと同じカラーマップ関数を利用
 import * as d3 from "d3";
