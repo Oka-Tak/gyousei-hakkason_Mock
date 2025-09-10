@@ -40,7 +40,7 @@ export async function fetchSubgraph(nodeId: string, opts?: { projectLimit?: numb
   // 3) projects under those organizations (limit + order)
   const { data: projects, error: pError } = await supabase
     .from('project')
-    .select('project_id, organization_id, budget_year, initial_budget_total, review_sheet_url')
+    .select('project_id, organization_id, budget_year, initial_budget_total')
     .in('organization_id', organizationIds)
     .eq('budget_year', 2024)
     .order('initial_budget_total', { ascending: false })
@@ -105,7 +105,6 @@ export async function fetchSubgraph(nodeId: string, opts?: { projectLimit?: numb
       section: org.section,
       group: null,
       team: org.team,
-      review_sheet_url: proj.review_sheet_url || '',
       initial_budget_total,
       spending_list,
     };
