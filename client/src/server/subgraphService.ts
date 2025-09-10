@@ -103,7 +103,6 @@ export async function fetchSubgraph(nodeId: string, opts?: { projectLimit?: numb
       division: org.division,
       office: org.unit,
       section: org.section,
-      group: null,
       team: org.team,
       initial_budget_total,
       spending_list,
