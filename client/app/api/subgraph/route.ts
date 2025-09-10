@@ -134,8 +134,8 @@ export async function GET(request: Request) {
     });
     
     return NextResponse.json(merged);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Subgraph API error:', error);
-    return NextResponse.json({ error: error?.message || String(error) }, { status: 500 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : String(error) }, { status: 500 });
   }
 }

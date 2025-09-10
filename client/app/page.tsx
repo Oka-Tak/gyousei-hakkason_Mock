@@ -2,7 +2,15 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from 'react';
+import { RawProjectData, GraphNode } from '../src/types';
 
+// 型ガード関数
+function isRawProjectData(item: any): item is RawProjectData {
+  return typeof item === 'object' && 
+         (typeof item.project_id === 'string' || item.project_id === undefined) &&
+         (typeof item.agency_name === 'string' || item.agency_name === undefined) &&
+         (typeof item.ministry_name === 'string' || item.ministry_name === undefined);
+}
 
 import Fuse from 'fuse.js';
 // ノード座標キャッシュ
@@ -185,7 +193,7 @@ const ForceDirectedGraph: React.FC = () => {
     svg.selectAll('.node-group').select('circle')
       .attr('stroke', (d: any) => d.id === node.id ? '#e17055' : '#fff')
       .attr('stroke-width', (d: any) => d.id === node.id ? 6 : 1.5)
-      .attr('r', (d: any) => d.id === node.id ? 1.5 * ((d as Node).group ? (nodeSizeByGroup[(d as Node).group] ?? 8) : 8) : ((d as Node).group ? (nodeSizeByGroup[(d as Node).group] ?? 8) : 8))
+      .attr('r', (d: any) => d.id === node.id ? 1.5 * (d.group ? (nodeSizeByGroup[d.group] ?? 8) : 8) : (d.group ? (nodeSizeByGroup[d.group] ?? 8) : 8))
       .attr('opacity', (d: any) => d.id === node.id ? 1 : 0.15);
     svg.selectAll('.node-group').select('text')
       .attr('opacity', (d: any) => d.id === node.id ? 1 : 0.15);
@@ -196,7 +204,7 @@ const ForceDirectedGraph: React.FC = () => {
       svg.selectAll('.node-group').select('circle')
         .attr('stroke', '#fff')
         .attr('stroke-width', 1.5)
-        .attr('r', (d: any) => (d as Node).group ? (nodeSizeByGroup[(d as Node).group] ?? 8) : 8)
+        .attr('r', (d: any) => d.group ? (nodeSizeByGroup[d.group] ?? 8) : 8)
         .attr('opacity', 1);
       svg.selectAll('.node-group').select('text')
         .attr('opacity', 1);
@@ -221,8 +229,8 @@ const ForceDirectedGraph: React.FC = () => {
   const ministryNames = result.map(item => (item as any).ministry_name).filter(Boolean);
   const agencies = Array.from(new Set([...agencyNames, ...ministryNames])).filter(Boolean);
   setVisibleAgencies(agencies);
-      } catch (e: any) {
-        setError(e.message);
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : '不明なエラーが発生しました');
       } finally {
         setLoading(false);
       }
@@ -264,9 +272,9 @@ const ForceDirectedGraph: React.FC = () => {
       .scaleExtent([minZoom, maxZoom])
       .on('zoom', zoomed);
     zoomRef.current = zoom;
-  svg.call(zoom as any);
+  (svg as any).call(zoom);
   // 初期位置リセット
-  svg.call((zoom as any).transform, d3.zoomIdentity.translate(0, 0).scale(initialZoom));
+  (svg as any).call(zoom.transform, d3.zoomIdentity.translate(0, 0).scale(initialZoom));
     const tooltip = d3.select('body').append('div')
       .attr('class', 'tooltip')
       .style('opacity', 0)
@@ -325,18 +333,20 @@ const ForceDirectedGraph: React.FC = () => {
 
     // ノード生成
   data.forEach(item => {
-    let topLevel = (item as any)['agency_name'];
+    if (!isRawProjectData(item)) return;
+    const projectData = item;
+    let topLevel = projectData.agency_name;
     let topLevelKey = 'agency_name';
     if (!topLevel || topLevel === '' || topLevel === null || topLevel === undefined) {
-      topLevel = (item as any)['ministry_name'];
+      topLevel = projectData.ministry_name;
       topLevelKey = 'ministry_name';
     }
     // 表示対象の省庁のみ描画
     if (!visibleAgencies.includes(topLevel)) return;
-    const restHierarchy = hierarchyNames.map(key => (item as any)[key]).filter(Boolean);
-    const restHierarchyYomi = hierarchyNames.map(key => (item as any)[key + '_yomi']).filter(Boolean);
+    const restHierarchy = hierarchyNames.map(key => projectData[key as keyof RawProjectData]).filter(Boolean);
+    const restHierarchyYomi = hierarchyNames.map(key => projectData[(key + '_yomi') as keyof RawProjectData]).filter(Boolean);
     const hierarchy = [topLevel, ...restHierarchy].filter(Boolean);
-    const hierarchyYomi = [(item as any)[topLevelKey + '_yomi'], ...restHierarchyYomi].filter(Boolean);
+    const hierarchyYomi = [projectData[(topLevelKey + '_yomi') as keyof RawProjectData], ...restHierarchyYomi].filter(Boolean);
     let parentNodeId: string | null = null;
     let nodePath: string[] = [];
     let nodePathYomi: string[] = [];
@@ -344,8 +354,8 @@ const ForceDirectedGraph: React.FC = () => {
     const currentBudget = Number(item.initial_budget_total) || 0;
 
     hierarchy.forEach((name, index) => {
-      nodePath.push(name);
-      nodePathYomi.push(hierarchyYomi[index] || '');
+      nodePath.push(String(name));
+      nodePathYomi.push(String(hierarchyYomi[index] || ''));
       const nodeId = nodePath.join('→');
       const nodeYomi = nodePathYomi.join('→');
       const groupName = index === 0 ? topLevelKey : hierarchyNames[index - 1] || 'unknown';
@@ -370,7 +380,7 @@ const ForceDirectedGraph: React.FC = () => {
         }
         const newNode: Node = {
           id: nodeId,
-          name: name,
+          name: String(name),
           yomi: nodeYomi,
           group: groupName,
           value: 0, // Initialize to 0, will be aggregated
@@ -551,7 +561,7 @@ const ForceDirectedGraph: React.FC = () => {
   // 省庁名テキストが円からはみ出さないようピクセル幅で省略
   function getTextWidth(text: string, fontSize: number, fontFamily = 'Arial, sans-serif'): number {
     if (!text) return 0;
-  const canvas = ((getTextWidth as any) as any)._canvas || (((getTextWidth as any) as any)._canvas = document.createElement('canvas'));
+  const canvas = (getTextWidth as any)._canvas || ((getTextWidth as any)._canvas = document.createElement('canvas'));
     const ctx = canvas.getContext('2d');
     if (!ctx) return 0;
     ctx.font = `${fontSize}px ${fontFamily}`;
@@ -966,7 +976,7 @@ const ForceDirectedGraph: React.FC = () => {
         minWidth: 120
       }}>
         <div style={{ fontWeight: 'bold', marginBottom: 4, fontSize: isMobile ? 13 : 14 }}>省庁表示切替</div>
-        {Array.from(new Set(data.map(item => (item as any).agency_name).filter(Boolean))).map(agency => (
+        {Array.from(new Set(data.map(item => isRawProjectData(item) ? item.agency_name : undefined).filter((name): name is string => Boolean(name)))).map(agency => (
           <label key={agency} style={{ display: 'block', marginBottom: 2, fontSize: isMobile ? 13 : 14 }}>
             <input
               type="checkbox"

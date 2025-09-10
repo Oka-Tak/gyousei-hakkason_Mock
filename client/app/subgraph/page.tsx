@@ -1,7 +1,16 @@
 "use client";
 
 import React, { Suspense, useEffect, useRef, useState } from "react";
+import { RawProjectData, SpendingItem } from '../../src/types';
 import Fuse from 'fuse.js';
+
+// 型ガード関数
+function isRawProjectData(item: any): item is RawProjectData {
+  return typeof item === 'object' && 
+         (typeof item.project_id === 'string' || item.project_id === undefined) &&
+         (typeof item.agency_name === 'string' || item.agency_name === undefined) &&
+         (typeof item.ministry_name === 'string' || item.ministry_name === undefined);
+}
 // d3は既にimport済み
 // メイングラフと同じカラーマップ関数を利用
 import * as d3 from "d3";
@@ -49,7 +58,7 @@ function SubgraphContent() {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const zoomRef = useRef<d3.ZoomBehavior<Element, unknown> | null>(null);
   const [zoomTransform, setZoomTransform] = useState<d3.ZoomTransform | null>(null);
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<RawProjectData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [focusedNode, setFocusedNode] = useState<any | null>(null);
@@ -99,8 +108,8 @@ function SubgraphContent() {
         const merged = await response.json();
         setData(merged);
         console.log(`[データ取得] 件数: ${Array.isArray(merged) ? merged.length : (merged?.length ?? '不明')}`);
-      } catch (e: any) {
-        setError(e.message);
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : 'エラーが発生しました');
       } finally {
         setLoading(false);
       }
@@ -867,7 +876,7 @@ function SubgraphContent() {
               <strong>支払先企業一覧:</strong>
               <ul style={{ margin: '6px 0 0 0', padding: 0, listStyle: 'none', maxHeight: isMobile ? 150 : 120, overflowY: 'auto', fontSize: isMobile ? 13 : 14 }}>
                 {(focusedNode.spending_list && focusedNode.spending_list.length > 0) ? (
-                  focusedNode.spending_list.map((sp: any, idx: number) => (
+                  focusedNode.spending_list.map((sp: SpendingItem, idx: number) => (
                     <li key={idx} style={{ borderBottom: '1px solid #eee', padding: '2px 0' }}>
                       {sp.recipient_name || '(名称不明)'}
                       {sp.corporate_number ? `（法人番号: ${sp.corporate_number}）` : ''}
