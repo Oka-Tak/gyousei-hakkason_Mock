@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
-import { RawProjectDataSchema } from '../../src/types/schemas';
+import { RawProjectDataSchema } from '@/types/schemas';
 
 const supabaseUrl = process.env.SUPABASE_URL!;
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY!;
@@ -19,7 +19,7 @@ export async function GET(request: Request) {
     const input = SubgraphInputSchema.safeParse({ node: searchParams.get('node') });
 
     if (!input.success) {
-      return NextResponse.json({ error: input.error.errors }, { status: 400 });
+      return NextResponse.json({ error: input.error.issues }, { status: 400 });
     }
 
     const nodeId = input.data.node;
