@@ -64,7 +64,7 @@ export async function fetchSubgraph(nodeId: string, opts?: { projectLimit?: numb
   if (includeSpending && blockIds.length > 0) {
     const { data: s, error: sError } = await supabase
       .from('project_spending')
-      .select('block_id, recipient_name, corporate_number, amount, block_name')
+      .select('block_id, recipient_name, corporate_number, amount')
       .in('block_id', blockIds)
       .limit(5000);
     if (sError) throw sError;
