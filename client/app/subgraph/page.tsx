@@ -8,6 +8,7 @@ import ForceGraph from '../../components/Graph/ForceGraph';
 import Controls from '../../components/Graph/Controls';
 import { useSubgraphData } from '../../hooks/useGraphData';
 import NodeDetails from '../../components/Graph/NodeDetails';
+import LoadingOverlay from '../../components/Common/LoadingOverlay';
 
 const NODE_SIZE_BY_GROUP: Record<string, number> = {
   agency_name: 36,
@@ -48,7 +49,9 @@ function SubgraphContent() {
 
   const zoomRef = useRef<d3.ZoomBehavior<Element, unknown> | null>(null);
 
-  if (loading) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>サブグラフを構築中...</div>;
+  if (loading) return (
+    <LoadingOverlay title="ZAIMYAKU" message="サブグラフを構築中..." variant="bounce" dotsCount={4} />
+  );
   if (error) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', color: 'crimson' }}>エラー: {error}</div>;
 
   return (

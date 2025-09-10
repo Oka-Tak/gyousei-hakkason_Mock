@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import Fuse from 'fuse.js';
+import LoadingOverlay from '../components/Common/LoadingOverlay';
 import ForceGraph from '../components/Graph/ForceGraph';
 import Controls from '../components/Graph/Controls';
 import { useMainGraphData } from '../hooks/useGraphData';
@@ -67,11 +68,9 @@ const Page: React.FC = () => {
   // zoom control
   const zoomRef = useRef<d3.ZoomBehavior<Element, unknown> | null>(null);
 
-  if (loading) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>データを読み込んでいます...</div>
-    );
-  }
+  if (loading) return (
+    <LoadingOverlay title="ZAIMYAKU" message="データを読み込んでいます..." variant="pulse" dotsCount={3} />
+  );
 
   if (error) {
     return (
