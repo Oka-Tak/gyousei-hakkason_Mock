@@ -42,6 +42,7 @@ function SubgraphContent() {
   const [currentHit, setCurrentHit] = useState(0);
   const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<any | null>(null);
+  const [loadingSpending, setLoadingSpending] = useState(false);
 
   const fuse = useMemo(() => new Fuse(limitedNodes, { keys: ['name', 'yomi'], threshold: 0.4, minMatchCharLength: 1, ignoreLocation: true }), [limitedNodes]);
   const results = useMemo(() => search ? fuse.search(search).map(r => ({ id: r.item.id, name: r.item.name })) : [], [fuse, search]);
@@ -68,7 +69,28 @@ function SubgraphContent() {
         onPrev={() => results.length && setCurrentHit((currentHit - 1 + results.length) % results.length)}
         onNext={() => results.length && setCurrentHit((currentHit + 1) % results.length)}
         results={results}
-        onPickResult={(id, index) => { setCurrentHit(index); setShowSpotlight(false); setFocusedNodeId(id); const n = nodes.find(n=>n.id===id); if(n) setSelectedNode(n); }}
+        onPickResult={async (id, index) => {
+          setCurrentHit(index);
+          setShowSpotlight(false);
+          setFocusedNodeId(id);
+          const n = nodes.find(n => n.id === id);
+          if (n) {
+            setSelectedNode(n);
+            if (n.group === 'project_name' && (!n.spending_list || n.spending_list.length === 0) && n.project_id) {
+              try {
+                setLoadingSpending(true);
+                const res = await fetch(`/api/project_spending?projectId=${encodeURIComponent(String(n.project_id))}`);
+                if (res.ok) {
+                  const json = await res.json();
+                  const list = json.spending_list || [];
+                  setSelectedNode({ ...n, spending_list: list });
+                }
+              } finally {
+                setLoadingSpending(false);
+              }
+            }
+          }
+        }}
       />
 
       {/* Back button */}
@@ -84,7 +106,23 @@ function SubgraphContent() {
         nodeSizeByGroup={NODE_SIZE_BY_GROUP}
         isMobile={isMobile}
         focusedNodeId={results.length ? results[currentHit]?.id ?? null : focusedNodeId}
-        onNodeClick={(d) => { setSelectedNode(d); setFocusedNodeId(d.id); }}
+        onNodeClick={async (d) => {
+          setSelectedNode(d);
+          setFocusedNodeId(d.id);
+          if (d.group === 'project_name' && (!d.spending_list || d.spending_list.length === 0) && d.project_id) {
+            try {
+              setLoadingSpending(true);
+              const res = await fetch(`/api/project_spending?projectId=${encodeURIComponent(String(d.project_id))}`);
+              if (res.ok) {
+                const json = await res.json();
+                const list = json.spending_list || [];
+                setSelectedNode({ ...d, spending_list: list });
+              }
+            } finally {
+              setLoadingSpending(false);
+            }
+          }
+        }}
         onBackgroundClick={() => { setFocusedNodeId(null); setSelectedNode(null); }}
         onZoomReady={(z) => { zoomRef.current = z; }}
         svgStyle={{ position: 'absolute', top: isMobile ? 100 : 0, left: 0, zIndex: 1, width: '100vw', height: isMobile ? 'calc(100vh - 100px)' : '100vh' }}
@@ -119,7 +157,7 @@ function SubgraphContent() {
       </div>
 
       {selectedNode && (
-        <NodeDetails node={selectedNode} isMobile={isMobile} onClose={() => { setSelectedNode(null); setFocusedNodeId(null); }} />
+        <NodeDetails node={selectedNode} isMobile={isMobile} loadingSpending={loadingSpending} onClose={() => { setSelectedNode(null); setFocusedNodeId(null); }} />
       )}
     </div>
   );

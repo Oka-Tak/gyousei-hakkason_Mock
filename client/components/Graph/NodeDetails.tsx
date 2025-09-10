@@ -7,9 +7,10 @@ interface NodeDetailsProps {
   node: GraphNodeDatum;
   isMobile?: boolean;
   onClose?: () => void;
+  loadingSpending?: boolean;
 }
 
-const NodeDetails: React.FC<NodeDetailsProps> = ({ node, isMobile = false, onClose }) => {
+const NodeDetails: React.FC<NodeDetailsProps> = ({ node, isMobile = false, onClose, loadingSpending }) => {
   const isProject = node.group === 'project_name';
   const projectId = node.project_id ? String(node.project_id) : '';
   const reviewUrl = projectId ? `https://rssystem.go.jp/project?projectNumbers=${projectId}&fiscalYear=2024` : node.url || '#';
@@ -45,6 +46,9 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({ node, isMobile = false, onClo
         </div>
         <div>
           <strong>支払先企業一覧:</strong>
+          {loadingSpending && (
+            <div style={{ color: '#64748b', fontSize: isMobile ? 12 : 13, marginTop: 4 }}>取得中...</div>
+          )}
           <ul style={{ margin: '6px 0 0 0', padding: 0, listStyle: 'none', maxHeight: isMobile ? 150 : 160, overflowY: 'auto', fontSize: isMobile ? 13 : 14 }}>
             {(node.spending_list && node.spending_list.length > 0) ? (
               node.spending_list.map((sp: any, idx: number) => (
@@ -52,7 +56,6 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({ node, isMobile = false, onClo
                   {sp.recipient_name || '(名称不明)'}
                   {sp.corporate_number ? `（法人番号: ${sp.corporate_number}）` : ''}
                   {sp.amount ? ` 金額: ${Number(sp.amount).toLocaleString()}円` : ''}
-                  {sp.block_name ? ` [${sp.block_name}]` : ''}
                 </li>
               ))
             ) : (
@@ -66,4 +69,3 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({ node, isMobile = false, onClo
 };
 
 export default NodeDetails;
-
