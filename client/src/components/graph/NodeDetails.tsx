@@ -31,6 +31,11 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({ node, isMobile = false, onClo
           ) : (
             <span style={{ color: '#888' }}>レビューシートURL（project_id未設定）</span>
           )}
+          {projectId && (
+            <div style={{ marginTop: 6 }}>
+              <a href={`/project/${encodeURIComponent(projectId)}`} style={{ color: '#07796b', textDecoration: 'underline' }}>この事業を詳しく見る</a>
+            </div>
+          )}
         </div>
       ) : null}
 
@@ -61,4 +66,3 @@ const NodeDetails: React.FC<NodeDetailsProps> = ({ node, isMobile = false, onClo
 };
 
 export default NodeDetails;
-
