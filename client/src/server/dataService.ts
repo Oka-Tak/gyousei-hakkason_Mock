@@ -1,13 +1,24 @@
 import { getSupabase } from './supabaseClient';
-import { getTokenizer, toHiragana } from './kuromoji';
+
+// Simple in-memory cache with TTL to avoid repeated heavy work
+let mainDataCache: any[] | null = null;
+let mainDataCachedAt = 0;
+const MAIN_TTL_MS = Number(process.env.MAIN_DATA_TTL_MS || 5 * 60 * 1000); // default 5 minutes
+const MAIN_LIMIT = Number(process.env.MAIN_DATA_LIMIT || (process.env.NODE_ENV === 'development' ? 800 : 2000));
 
 export async function fetchMainData() {
+  // Serve from cache if fresh
+  const now = Date.now();
+  if (mainDataCache && now - mainDataCachedAt < MAIN_TTL_MS) {
+    return mainDataCache;
+  }
+
   const supabase = getSupabase();
   const { data: projects, error: projectError } = await supabase
     .from('project')
     .select('budget_year, project_year, organization_id, initial_budget_total, adjustment_total, carryover_from_previous_total, contingency_total')
     .eq('budget_year', 2024)
-    .limit(2000);
+    .limit(MAIN_LIMIT);
   if (projectError) throw projectError;
 
   const organizationIds = [...new Set(projects?.map(p => p.organization_id).filter(Boolean))];
@@ -28,9 +39,6 @@ export async function fetchMainData() {
   (organizations || []).forEach(o => orgMap.set(o.organization_id, o));
   const agencyMap = new Map<string, any>();
   (agencies || []).forEach(a => agencyMap.set(a.agency_id, a));
-
-  const tokenizer = await getTokenizer();
-  const nameKeys = ['agency_name', 'ministry_name', 'bureau_agency', 'department', 'division', 'office', 'section', 'group', 'team', 'project_name'];
 
   const rowsWithYomi = (projects || []).map((row: any) => {
     const org = orgMap.get(row.organization_id) || {};
@@ -53,13 +61,9 @@ export async function fetchMainData() {
         Number(row.carryover_from_previous_total || 0) +
         Number(row.contingency_total || 0),
     };
-    const yomiObj: Record<string, string> = {};
-    nameKeys.forEach(key => {
-      const val = (base as any)[key];
-      yomiObj[key + '_yomi'] = (val && typeof val === 'string') ? toHiragana(tokenizer, val) : '';
-    });
-    return { ...base, ...yomiObj };
+    return { ...base };
   });
+  mainDataCache = rowsWithYomi;
+  mainDataCachedAt = Date.now();
   return rowsWithYomi;
 }
-

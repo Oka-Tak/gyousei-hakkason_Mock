@@ -96,11 +96,4 @@ export interface SearchResult {
 }
 
 // Kuromoji トークナイザーの型定義
-export interface KuromojiToken {
-  surface_form: string;
-  reading?: string;
-}
-
-export interface KuromojiTokenizer {
-  tokenize(text: string): KuromojiToken[];
-}
+// kuromoji は廃止

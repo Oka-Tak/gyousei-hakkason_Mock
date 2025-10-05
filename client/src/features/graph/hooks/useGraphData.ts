@@ -93,7 +93,7 @@ export function useMainGraphData(visibleAgencies: string[]): GraphDataResult {
         nodePath.push(String(name));
         nodePathYomi.push(String(hierarchyYomi[idx] || ''));
         const nodeId = nodePath.join('→');
-        const nodeYomi = nodePathYomi.join('→');
+        const nodeYomi = '';
         const groupName = idx === 0 ? topLevelKey : MAIN_HIERARCHY[idx - 1] || 'unknown';
         if (!nodeMap.has(nodeId)) {
           const newNode: GraphNodeDatum = { id: nodeId, name: String(name), yomi: nodeYomi, group: groupName, value: 0, initial_budget: 0, url: '#', topLevel };
@@ -182,7 +182,7 @@ export function useSubgraphData(nodeId: string | null): GraphDataResult {
         nodePath.push(String(name));
         nodePathYomi.push(String(hierarchyYomi[index] || ''));
         const id = nodePath.join('→');
-        const nodeYomi = nodePathYomi.join('→');
+        const nodeYomi = '';
         const isLast = index === hierarchy.length - 1;
         const baseGroup = index === 0 ? topLevelKey : SUB_HIERARCHY[index - 1] || 'unknown';
         const group = isLast ? 'project_name' : baseGroup;
@@ -217,4 +217,3 @@ export function useSubgraphData(nodeId: string | null): GraphDataResult {
 
   return { nodes, links, colorMap, loading, error, limitedNodes };
 }
-

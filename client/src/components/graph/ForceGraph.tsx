@@ -17,10 +17,11 @@ export interface ForceGraphProps {
   onBackgroundClick?: () => void;
   onZoomReady?: (zoom: d3.ZoomBehavior<Element, unknown>) => void;
   svgStyle?: React.CSSProperties;
+  showTopLevelLabels?: boolean;
 }
 
 const ForceGraph: React.FC<ForceGraphProps> = (props) => {
-  const { nodes, links, colorMap, nodeSizeByGroup, isMobile = false, focusedNodeId = null, onNodeClick, onBackgroundClick, onZoomReady, svgStyle } = props;
+  const { nodes, links, colorMap, nodeSizeByGroup, isMobile = false, focusedNodeId = null, onNodeClick, onBackgroundClick, onZoomReady, svgStyle, showTopLevelLabels = false } = props;
   const svgRef = useRef<SVGSVGElement | null>(null);
   const zoomRef = useRef<d3.ZoomBehavior<Element, unknown> | null>(null);
 
@@ -93,12 +94,36 @@ const ForceGraph: React.FC<ForceGraphProps> = (props) => {
       unknown: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-2.83.48-5.48-1.51-5.96-4.34-.09-.52.36-.99.89-.99.45 0 .83.3.93.73.34 1.5 1.72 2.57 3.24 2.57 1.52 0 2.9-1.07 3.24-2.57.1-.43.48-.73.93-.73.53 0 .98.47.89.99-.48 2.83-3.13 4.82-5.96 4.34z',
     };
 
-    nodeEnter.filter(d => d.group !== 'agency_name')
+    nodeEnter.filter(d => d.group !== 'agency_name' && d.group !== 'ministry_name')
       .append('path')
       .attr('d', d => iconPaths[d.group] || iconPaths['unknown'])
       .attr('fill', '#fff')
       .attr('stroke', 'none')
       .attr('transform', d => { const r = nodeSizeByGroup[d.group] || 8; return `scale(${(r / 12) * 0.7}) translate(-12,-12)`; });
+
+    if (showTopLevelLabels) {
+      nodeEnter
+        .filter(d => d.group === 'agency_name' || d.group === 'ministry_name')
+        .append('text')
+        .attr('class', 'node-label')
+        .text(d => d.name)
+        .attr('text-anchor', 'middle')
+        .attr('dominant-baseline', 'middle')
+        .attr('alignment-baseline', 'middle')
+        .attr('y', 0)
+        .attr('fill', '#fff')
+        .attr('font-weight', 700)
+        .attr('font-size', d => {
+          const r = nodeSizeByGroup[d.group] || 8;
+          const max = isMobile ? 12 : 13;
+          const min = isMobile ? 8 : 9;
+          return Math.max(min, Math.min(max, Math.round(r * 0.5)));
+        })
+        .attr('paint-order', 'stroke')
+        .attr('stroke', 'rgba(0,0,0,0.45)')
+        .attr('stroke-width', 3)
+        .style('pointer-events', 'none');
+    }
 
     const minRadius = 120;
     const radiusStep = 120;
@@ -125,7 +150,7 @@ const ForceGraph: React.FC<ForceGraphProps> = (props) => {
 
     svg.on('click', () => { onBackgroundClick && onBackgroundClick(); });
     return () => { svg.on('.zoom', null); };
-  }, [nodes, links, colorMap, nodeSizeByGroup, isMobile]);
+  }, [nodes, links, colorMap, nodeSizeByGroup, isMobile, showTopLevelLabels]);
 
   useEffect(() => {
     if (!svgRef.current) return;
@@ -146,6 +171,8 @@ const ForceGraph: React.FC<ForceGraphProps> = (props) => {
         .attr('stroke-width', (d: any) => d.id === target.id ? 6 : 1.5)
         .attr('r', (d: any) => d.id === target.id ? 1.5 * (nodeSizeByGroup[d.group as string] || 8) : (nodeSizeByGroup[d.group as string] || 8))
         .attr('opacity', (d: any) => d.id === target.id ? 1 : 0.15);
+      svg.selectAll('.node-group').select('.node-label')
+        .attr('opacity', (d: any) => d.id === target.id ? 1 : 0.15);
       svg.selectAll('.links line')
         .attr('opacity', (l: any) => (l.source.id === focusedNodeId || l.target.id === focusedNodeId) ? 1 : 0.07);
     } else {
@@ -154,6 +181,7 @@ const ForceGraph: React.FC<ForceGraphProps> = (props) => {
         .attr('stroke-width', 1.5)
         .attr('r', (d: any) => nodeSizeByGroup[d.group as string] || 8)
         .attr('opacity', 1);
+      svg.selectAll('.node-group').select('.node-label').attr('opacity', 1);
       svg.selectAll('.links line').attr('opacity', 0.6);
     }
   }, [focusedNodeId, nodes, nodeSizeByGroup]);
@@ -162,4 +190,3 @@ const ForceGraph: React.FC<ForceGraphProps> = (props) => {
 };
 
 export default ForceGraph;
-

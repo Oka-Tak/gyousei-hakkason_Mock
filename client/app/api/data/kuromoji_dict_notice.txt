@@ -1,1 +1,0 @@
-kuromoji.jsの辞書ファイルはnode_modules/kuromoji/dict/を参照することで動作します。Next.js API Routeで利用する場合、サーバー側でnode_modules配下を参照できることを前提とします。

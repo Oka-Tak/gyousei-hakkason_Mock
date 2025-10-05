@@ -66,6 +66,7 @@ const Page: React.FC = () => {
         links={links}
         colorMap={colorMap}
         nodeSizeByGroup={NODE_SIZE_BY_GROUP}
+        showTopLevelLabels
         isMobile={isMobile}
         focusedNodeId={results.length ? results[currentHit]?.id ?? null : focusedNodeId}
         onNodeClick={(d) => { window.location.href = `/subgraph?node=${encodeURIComponent(d.id)}`; }}
@@ -84,4 +85,3 @@ const Page: React.FC = () => {
 };
 
 export default Page;
-

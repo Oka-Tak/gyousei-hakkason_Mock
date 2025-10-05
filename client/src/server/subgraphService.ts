@@ -2,6 +2,11 @@ import { z } from 'zod';
 import { getSupabase } from './supabaseClient';
 import { RawProjectDataSchema } from '@/types/schemas';
 
+// Cache per nodeId + limit to speed up repeated requests
+const SUBGRAPH_TTL_MS = Number(process.env.SUBGRAPH_TTL_MS || 5 * 60 * 1000);
+type CacheKey = string; // `${nodeId}::${limit}`
+let subgraphCache = new Map<CacheKey, { at: number; data: any[] }>();
+
 const ORG_FIELD_ORDER = ['bureau_office', 'department', 'division', 'unit', 'section', 'group', 'team'] as const;
 const PROJECT_LIMIT_DEFAULT = 600;
 
@@ -12,6 +17,14 @@ export async function fetchSubgraph(nodeId: string, opts?: { projectLimit?: numb
   const topLevelOrg = parts[0];
   const tail = parts.slice(1); // hierarchy under agency
   const projectLimit = opts?.projectLimit ?? PROJECT_LIMIT_DEFAULT;
+
+  // Cache check
+  const cacheKey: CacheKey = `${decoded}::${projectLimit}`;
+  const cached = subgraphCache.get(cacheKey);
+  const now = Date.now();
+  if (cached && now - cached.at < SUBGRAPH_TTL_MS) {
+    return cached.data;
+  }
 
   // 1) resolve agency
   const { data: agencies, error: agencyError } = await supabase
@@ -113,5 +126,7 @@ export async function fetchSubgraph(nodeId: string, opts?: { projectLimit?: numb
   if (!validated.success) {
     throw new Error('Invalid subgraph payload');
   }
-  return validated.data;
+  const result = validated.data;
+  subgraphCache.set(cacheKey, { at: Date.now(), data: result });
+  return result;
 }
