@@ -7,7 +7,7 @@ sudo apt update
 sudo apt install postgresql
 ```
 
-## 2. ユーザー・データベース作成　
+## 2. ユーザー・データベース作成
 ```bash
 sudo -u postgres psql
 ```
