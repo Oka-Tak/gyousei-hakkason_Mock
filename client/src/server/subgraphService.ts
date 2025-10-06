@@ -2,6 +2,49 @@ import { z } from 'zod';
 import { getSupabase } from './supabaseClient';
 import { RawProjectDataSchema } from '@/types/schemas';
 
+type AgencyRow = {
+  agency_id: string;
+  agency_name: string | null;
+  agency_order: number | null;
+  [key: string]: any;
+};
+
+type OrganizationRow = {
+  organization_id: string;
+  agency_id: string | null;
+  bureau_office?: string | null;
+  department?: string | null;
+  division?: string | null;
+  unit?: string | null;
+  section?: string | null;
+  group?: string | null;
+  team?: string | null;
+  [key: string]: any;
+};
+
+type ProjectRow = {
+  project_id: number;
+  organization_id: string | null;
+  budget_year: number | null;
+  initial_budget_total: number | null;
+  [key: string]: any;
+};
+
+type SpendingBlockRow = {
+  block_id: number;
+  project_id: number;
+  block_total_amount?: number | null;
+  [key: string]: any;
+};
+
+type SpendingRow = {
+  block_id: number;
+  recipient_name: string;
+  corporate_number: string | null;
+  amount: number | null;
+  [key: string]: any;
+};
+
 // Cache per nodeId + limit to speed up repeated requests
 const SUBGRAPH_TTL_MS = Number(process.env.SUBGRAPH_TTL_MS || 5 * 60 * 1000);
 type CacheKey = string; // `${nodeId}::${limit}`
@@ -32,8 +75,9 @@ export async function fetchSubgraph(nodeId: string, opts?: { projectLimit?: numb
     .select('agency_id, agency_name, agency_order')
     .eq('agency_name', topLevelOrg);
   if (agencyError) throw agencyError;
-  if (!agencies?.length) return [];
-  const agencyIds = agencies.map(a => a.agency_id);
+  const agencyRows = (agencies ?? []) as AgencyRow[];
+  if (!agencyRows.length) return [];
+  const agencyIds = agencyRows.map(a => a.agency_id);
 
   // 2) filter organizations by tail path
   let orgQuery = supabase
@@ -47,8 +91,9 @@ export async function fetchSubgraph(nodeId: string, opts?: { projectLimit?: numb
   }
   const { data: organizations, error: orgError } = await orgQuery;
   if (orgError) throw orgError;
-  if (!organizations?.length) return [];
-  const organizationIds = organizations.map(o => o.organization_id);
+  const organizationRows = (organizations ?? []) as OrganizationRow[];
+  if (!organizationRows.length) return [];
+  const organizationIds = organizationRows.map(o => o.organization_id);
 
   // 3) projects under those organizations (limit + order)
   const { data: projects, error: pError } = await supabase
@@ -59,8 +104,9 @@ export async function fetchSubgraph(nodeId: string, opts?: { projectLimit?: numb
     .order('initial_budget_total', { ascending: false })
     .limit(projectLimit);
   if (pError) throw pError;
-  if (!projects?.length) return [];
-  const projectIds = projects.map(p => p.project_id);
+  const projectRows = (projects ?? []) as ProjectRow[];
+  if (!projectRows.length) return [];
+  const projectIds = projectRows.map(p => p.project_id);
 
   // 4) blocks for projects (limit to prevent explosion)
   const { data: blocks, error: psbError } = await supabase
@@ -69,7 +115,8 @@ export async function fetchSubgraph(nodeId: string, opts?: { projectLimit?: numb
     .in('project_id', projectIds)
     .limit(3000);
   if (psbError) throw psbError;
-  const blockIds = (blocks || []).map((b: any) => b.block_id);
+  const blockRows = (blocks ?? []) as SpendingBlockRow[];
+  const blockIds = blockRows.map(b => b.block_id);
 
   // include spending only if reasonable size
   const includeSpending = (projects.length <= 400) && (blockIds.length <= 2000);
@@ -81,42 +128,42 @@ export async function fetchSubgraph(nodeId: string, opts?: { projectLimit?: numb
       .in('block_id', blockIds)
       .limit(5000);
     if (sError) throw sError;
-    spendings = s || [];
+    spendings = (s ?? []) as SpendingRow[];
   }
 
   // maps
-  const orgMap = new Map<string, any>();
-  organizations.forEach(o => orgMap.set(o.organization_id, o));
-  const agencyById = new Map<string, any>();
-  agencies.forEach(a => agencyById.set(a.agency_id, a));
-  const projectMap = new Map<number, any>();
-  (projects || []).forEach((p: any) => projectMap.set(p.project_id, p));
-  const spendingByBlock = new Map<number, any[]>();
-  (spendings || []).forEach(sp => {
+  const orgMap = new Map<string, OrganizationRow>();
+  organizationRows.forEach(o => orgMap.set(o.organization_id, o));
+  const agencyById = new Map<string, AgencyRow>();
+  agencyRows.forEach(a => agencyById.set(a.agency_id, a));
+  const projectMap = new Map<number, ProjectRow>();
+  projectRows.forEach(p => projectMap.set(p.project_id, p));
+  const spendingByBlock = new Map<number, SpendingRow[]>();
+  spendings.forEach(sp => {
     const k = sp.block_id;
     if (!spendingByBlock.has(k)) spendingByBlock.set(k, []);
     spendingByBlock.get(k)!.push(sp);
   });
 
-  const merged = (blocks || []).map((block: any) => {
-    const proj = projectMap.get(block.project_id) || {};
-    const org = orgMap.get(proj.organization_id) || {};
-    const ag = agencyById.get(org.agency_id) || {};
-    const initial_budget_total = block.block_total_amount ?? proj.initial_budget_total ?? 0;
+  const merged = blockRows.map((block) => {
+    const proj = projectMap.get(block.project_id);
+    const org = proj && proj.organization_id ? orgMap.get(proj.organization_id) : undefined;
+    const ag = org && org.agency_id ? agencyById.get(org.agency_id) : undefined;
+    const initial_budget_total = block.block_total_amount ?? proj?.initial_budget_total ?? 0;
     const spending_list = includeSpending ? (spendingByBlock.get(block.block_id) || []) : [];
     return {
       ...block,
       ...proj,
-      agency_id: ag.agency_id,
-      agency_name: ag.agency_name,
-      agency_order: ag.agency_order,
-      ministry_name: ag.agency_name,
-      bureau_agency: org.bureau_office,
-      department: org.department,
-      division: org.division,
-      office: org.unit,
-      section: org.section,
-      team: org.team,
+      agency_id: ag?.agency_id,
+      agency_name: ag?.agency_name,
+      agency_order: ag?.agency_order,
+      ministry_name: ag?.agency_name,
+      bureau_agency: org?.bureau_office,
+      department: org?.department,
+      division: org?.division,
+      office: org?.unit,
+      section: org?.section,
+      team: org?.team,
       initial_budget_total,
       spending_list,
     };

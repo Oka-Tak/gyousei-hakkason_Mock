@@ -1,5 +1,39 @@
 import { getSupabase } from './supabaseClient';
 
+type AgencyRow = {
+  agency_id: string;
+  agency_name: string | null;
+  [key: string]: any;
+};
+
+type OrganizationRow = {
+  organization_id: string;
+  agency_id: string | null;
+  [key: string]: any;
+};
+
+type ProjectRow = {
+  project_id: number;
+  organization_id: string | null;
+  budget_year: number | null;
+  [key: string]: any;
+};
+
+type SpendingBlockRow = {
+  block_id: number;
+  project_id: number;
+  [key: string]: any;
+};
+
+type SpendingRow = {
+  block_id: number;
+  recipient_name: string;
+  corporate_number: string | null;
+  amount: number | null;
+  contract_method?: string | null;
+  [key: string]: any;
+};
+
 type RecipientAgg = {
   recipient_name: string;
   corporate_number: string | null;
@@ -23,16 +57,18 @@ export async function fetchTopRecipientsByAgency(agencyName: string, limit = 10)
     .select('agency_id, agency_name')
     .eq('agency_name', agencyName);
   if (aErr) throw aErr;
-  if (!agencies?.length) return [];
-  const agencyIds = agencies.map(a => a.agency_id);
+  const agencyRows = (agencies ?? []) as AgencyRow[];
+  if (!agencyRows.length) return [];
+  const agencyIds = agencyRows.map(a => a.agency_id);
 
   const { data: orgs, error: oErr } = await supabase
     .from('organization')
     .select('organization_id, agency_id')
     .in('agency_id', agencyIds);
   if (oErr) throw oErr;
-  if (!orgs?.length) return [];
-  const orgIds = orgs.map(o => o.organization_id);
+  const orgRows = (orgs ?? []) as OrganizationRow[];
+  if (!orgRows.length) return [];
+  const orgIds = orgRows.map(o => o.organization_id);
 
   const { data: projects, error: pErr } = await supabase
     .from('project')
@@ -40,18 +76,20 @@ export async function fetchTopRecipientsByAgency(agencyName: string, limit = 10)
     .in('organization_id', orgIds)
     .eq('budget_year', 2024);
   if (pErr) throw pErr;
-  if (!projects?.length) return [];
-  const projectIds = projects.map(p => p.project_id);
+  const projectRows = (projects ?? []) as ProjectRow[];
+  if (!projectRows.length) return [];
+  const projectIds = projectRows.map(p => p.project_id);
 
   const { data: blocks, error: bErr } = await supabase
     .from('project_spending_block')
     .select('block_id, project_id')
     .in('project_id', projectIds);
   if (bErr) throw bErr;
-  if (!blocks?.length) return [];
-  const blockIds = blocks.map(b => b.block_id);
+  const blockRows = (blocks ?? []) as SpendingBlockRow[];
+  if (!blockRows.length) return [];
+  const blockIds = blockRows.map(b => b.block_id);
   const projectByBlock = new Map<number, number>();
-  blocks.forEach(b => projectByBlock.set(b.block_id, b.project_id));
+  blockRows.forEach(b => projectByBlock.set(b.block_id, b.project_id));
 
   const { data: spendings, error: sErr } = await supabase
     .from('project_spending')
@@ -60,9 +98,10 @@ export async function fetchTopRecipientsByAgency(agencyName: string, limit = 10)
   if (sErr) throw sErr;
 
   const agg = new Map<string, { name: string; corp: string | null; total: number; projects: Set<number> }>();
-  (spendings || []).forEach(sp => {
+  const spendingRows = (spendings ?? []) as SpendingRow[];
+  spendingRows.forEach(sp => {
     const name: string = sp.recipient_name || '不明';
-    const corp = (sp.corporate_number as string | null) || null;
+    const corp = sp.corporate_number || null;
     const key2 = `${name}::${corp ?? ''}`;
     if (!agg.has(key2)) agg.set(key2, { name, corp, total: 0, projects: new Set<number>() });
     const rec = agg.get(key2)!;
@@ -112,32 +151,36 @@ export async function fetchCompanyOverview(input: { corporate_number?: string; n
   else if (name) spQuery = spQuery.ilike('recipient_name', `%${name}%`);
   const { data: spendings, error: spErr } = await spQuery;
   if (spErr) throw spErr;
-  if (!spendings?.length) { companyCache.set(key, { at: now, data: null }); return null; }
+  const spendingRows = (spendings ?? []) as SpendingRow[];
+  if (!spendingRows.length) { companyCache.set(key, { at: now, data: null }); return null; }
 
-  const blockIds = Array.from(new Set(spendings.map(s => s.block_id as number))).slice(0, 10000);
+  const blockIds = Array.from(new Set(spendingRows.map(s => s.block_id))).slice(0, 10000);
   const { data: blocks, error: bErr } = await supabase
     .from('project_spending_block')
     .select('block_id, project_id')
     .in('block_id', blockIds);
   if (bErr) throw bErr;
-  if (!blocks?.length) { companyCache.set(key, { at: now, data: null }); return null; }
+  const blockRows = (blocks ?? []) as SpendingBlockRow[];
+  if (!blockRows.length) { companyCache.set(key, { at: now, data: null }); return null; }
   const projectByBlock = new Map<number, number>();
   const projectIds = new Set<number>();
-  blocks.forEach(b => { projectByBlock.set(b.block_id as number, b.project_id as number); projectIds.add(b.project_id as number); });
+  blockRows.forEach(b => { projectByBlock.set(b.block_id, b.project_id); projectIds.add(b.project_id); });
 
   const { data: projects, error: pErr } = await supabase
     .from('project')
     .select('project_id, organization_id, budget_year')
     .in('project_id', Array.from(projectIds));
   if (pErr) throw pErr;
-  const orgIds = Array.from(new Set((projects || []).map(p => p.organization_id as string)));
+  const projectRows = (projects ?? []) as ProjectRow[];
+  const orgIds = Array.from(new Set(projectRows.map(p => p.organization_id).filter((id): id is string => !!id)));
 
   const { data: orgs, error: oErr } = await supabase
     .from('organization')
     .select('organization_id, agency_id')
     .in('organization_id', orgIds);
   if (oErr) throw oErr;
-  const agencyIds = Array.from(new Set((orgs || []).map(o => o.agency_id as string)));
+  const orgRows = (orgs ?? []) as OrganizationRow[];
+  const agencyIds = Array.from(new Set(orgRows.map(o => o.agency_id).filter((id): id is string => !!id)));
 
   const { data: agencies, error: aErr } = await supabase
     .from('agency')
@@ -145,37 +188,39 @@ export async function fetchCompanyOverview(input: { corporate_number?: string; n
     .in('agency_id', agencyIds);
   if (aErr) throw aErr;
 
-  const orgById = new Map<string, any>();
-  (orgs || []).forEach(o => orgById.set(o.organization_id as string, o));
-  const agencyById = new Map<string, any>();
-  (agencies || []).forEach(a => agencyById.set(a.agency_id as string, a));
-  const projectById = new Map<number, any>();
-  (projects || []).forEach(p => projectById.set(p.project_id as number, p));
+  const agencyRows = (agencies ?? []) as AgencyRow[];
+
+  const orgById = new Map<string, OrganizationRow>();
+  orgRows.forEach(o => orgById.set(o.organization_id, o));
+  const agencyById = new Map<string, AgencyRow>();
+  agencyRows.forEach(a => agencyById.set(a.agency_id, a));
+  const projectById = new Map<number, ProjectRow>();
+  projectRows.forEach(p => projectById.set(p.project_id, p));
 
   // Aggregations
   let total = 0;
   const byAgency = new Map<string, number>();
   const byYear = new Map<number, number>();
   const byContract = new Map<string, { count: number; value: number }>();
-  spendings.forEach(sp => {
+  spendingRows.forEach(sp => {
     const amount = Number(sp.amount || 0);
     total += amount;
-    const pid = projectByBlock.get(sp.block_id as number);
+    const pid = projectByBlock.get(sp.block_id);
     const pj = pid != null ? projectById.get(pid) : null;
     const year = pj?.budget_year as number | undefined;
     if (year != null) byYear.set(year, (byYear.get(year) || 0) + amount);
-    const org = pj ? orgById.get(pj.organization_id as string) : null;
-    const ag = org ? agencyById.get(org.agency_id as string) : null;
+    const org = pj && pj.organization_id ? orgById.get(pj.organization_id) : null;
+    const ag = org && org.agency_id ? agencyById.get(org.agency_id) : null;
     const agName = ag?.agency_name || '不明';
     byAgency.set(agName, (byAgency.get(agName) || 0) + amount);
-    const cm = (sp.contract_method as string) || '不明';
+    const cm = sp.contract_method || '不明';
     const prev = byContract.get(cm) || { count: 0, value: 0 };
     byContract.set(cm, { count: prev.count + 1, value: prev.value + amount });
   });
 
-  const firstSp = spendings[0];
-  const nameFinal = firstSp.recipient_name as string;
-  const cnFinal = (firstSp.corporate_number as string | null) || null;
+  const firstSp = spendingRows[0];
+  const nameFinal = firstSp.recipient_name;
+  const cnFinal = firstSp.corporate_number || null;
   const overview: CompanyOverview = {
     recipient_name: nameFinal,
     corporate_number: cnFinal,
@@ -189,4 +234,3 @@ export async function fetchCompanyOverview(input: { corporate_number?: string; n
   companyCache.set(key, { at: Date.now(), data: overview });
   return overview;
 }
-
