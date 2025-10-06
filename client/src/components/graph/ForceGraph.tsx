@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import * as d3 from 'd3';
 import type { GraphNodeDatum, GraphLinkDatum } from '@/features/graph/types';
+import { formatJaYen } from '@/utils/format';
 
 export type NodeSizeMap = Record<string, number>;
 
@@ -12,7 +13,13 @@ export interface ForceGraphProps {
   colorMap: Record<string, string>;
   nodeSizeByGroup: NodeSizeMap;
   isMobile?: boolean;
+  width?: number;
+  height?: number;
+  linkDistance?: number;
+  chargeStrength?: number;
   focusedNodeId?: string | null;
+  highlightNodeIds?: string[];
+  highlightEdges?: Array<{ sourceId: string; targetId: string }>;
   onNodeClick?: (node: GraphNodeDatum, event: any) => void;
   onBackgroundClick?: () => void;
   onZoomReady?: (zoom: d3.ZoomBehavior<Element, unknown>) => void;
@@ -21,7 +28,7 @@ export interface ForceGraphProps {
 }
 
 const ForceGraph: React.FC<ForceGraphProps> = (props) => {
-  const { nodes, links, colorMap, nodeSizeByGroup, isMobile = false, focusedNodeId = null, onNodeClick, onBackgroundClick, onZoomReady, svgStyle, showTopLevelLabels = false } = props;
+  const { nodes, links, colorMap, nodeSizeByGroup, isMobile = false, width: widthProp, height: heightProp, linkDistance: linkDistanceProp, chargeStrength: chargeStrengthProp, focusedNodeId = null, highlightNodeIds = [], highlightEdges = [], onNodeClick, onBackgroundClick, onZoomReady, svgStyle, showTopLevelLabels = false } = props;
   const svgRef = useRef<SVGSVGElement | null>(null);
   const zoomRef = useRef<d3.ZoomBehavior<Element, unknown> | null>(null);
 
@@ -36,14 +43,14 @@ const ForceGraph: React.FC<ForceGraphProps> = (props) => {
 
   useEffect(() => {
     if (!svgRef.current) return;
-    const width = window.innerWidth;
-    const height = isMobile ? window.innerHeight - 56 : window.innerHeight;
+    const width = widthProp ?? window.innerWidth;
+    const height = heightProp ?? (isMobile ? window.innerHeight - 56 : window.innerHeight);
 
     const svg = d3.select(svgRef.current)
       .attr('width', width)
       .attr('height', height)
-      .style('width', '100vw')
-      .style('height', isMobile ? 'calc(100vh - 56px)' : '100vh')
+      .style('width', widthProp ? `${width}px` : '100vw')
+      .style('height', heightProp ? `${height}px` : (isMobile ? 'calc(100vh - 56px)' : '100vh'))
       .html('');
 
     const zoomLayer = svg.append('g').attr('class', 'zoom-layer');
@@ -125,12 +132,17 @@ const ForceGraph: React.FC<ForceGraphProps> = (props) => {
         .style('pointer-events', 'none');
     }
 
+    // Native tooltip
+    nodeEnter.append('title').text(d => `${d.name}\n${formatJaYen(d.value || 0)}`);
+
     const minRadius = 120;
     const radiusStep = 120;
     const nodeLevels = new Map<GraphNodeDatum, number>();
     nodes.forEach(n => nodeLevels.set(n, Math.max(0, n.id.split('→').length - 1)));
-    const linkDistance = isMobile ? 140 : 180;
-    const chargeStrength = isMobile ? -300 : -600;
+    const baseLinkDistance = isMobile ? 140 : 180;
+    const baseChargeStrength = isMobile ? -300 : -600;
+    const linkDistance = linkDistanceProp ?? baseLinkDistance;
+    const chargeStrength = chargeStrengthProp ?? baseChargeStrength;
 
     const simulation = d3.forceSimulation<GraphNodeDatum, GraphLinkDatum>(nodes)
       .force('link', d3.forceLink<GraphNodeDatum, GraphLinkDatum>(links).id(d => d.id).distance(linkDistance))
@@ -150,20 +162,37 @@ const ForceGraph: React.FC<ForceGraphProps> = (props) => {
 
     svg.on('click', () => { onBackgroundClick && onBackgroundClick(); });
     return () => { svg.on('.zoom', null); };
-  }, [nodes, links, colorMap, nodeSizeByGroup, isMobile, showTopLevelLabels]);
+  }, [nodes, links, colorMap, nodeSizeByGroup, isMobile, widthProp, heightProp, showTopLevelLabels]);
 
   useEffect(() => {
     if (!svgRef.current) return;
     const svg = d3.select(svgRef.current);
-    if (focusedNodeId) {
+    const hasHighlight = (highlightNodeIds && highlightNodeIds.length > 0) || (highlightEdges && highlightEdges.length > 0);
+    if (hasHighlight) {
+      const nodeSet = new Set(highlightNodeIds);
+      const edgeSet = new Set<string>();
+      highlightEdges.forEach(e => { edgeSet.add(`${e.sourceId}→${e.targetId}`); edgeSet.add(`${e.targetId}→${e.sourceId}`); });
+      svg.selectAll('.node-group').select('circle')
+        .attr('opacity', (d: any) => nodeSet.size === 0 ? 1 : (nodeSet.has(d.id) ? 1 : 0.12))
+        .attr('stroke', (d: any) => nodeSet.has(d.id) ? '#e17055' : '#fff')
+        .attr('stroke-width', (d: any) => nodeSet.has(d.id) ? 4 : 1.5);
+      svg.selectAll('.node-group').select('.node-label')
+        .attr('opacity', (d: any) => nodeSet.size === 0 ? 1 : (nodeSet.has(d.id) ? 1 : 0.12));
+      svg.selectAll('.links line')
+        .attr('opacity', (l: any) => edgeSet.size === 0 ? 0.6 : (edgeSet.has(`${l.source.id}→${l.target.id}`) ? 1 : 0.08))
+        .attr('stroke', (l: any) => edgeSet.has(`${l.source.id}→${l.target.id}`) ? '#e17055' : '#999')
+        .attr('stroke-width', (l: any) => edgeSet.has(`${l.source.id}→${l.target.id}`) ? Math.max(3, metrics.edgeWidthScale(l.value)) : metrics.edgeWidthScale(l.value));
+    } else if (focusedNodeId) {
       const target = nodes.find(n => n.id === focusedNodeId);
       if (!target) return;
       const scale = 1.8;
       const x = target.x ?? 0;
       const y = target.y ?? 0;
       if (zoomRef.current) {
-        const tx = window.innerWidth / 2 - x * scale;
-        const ty = window.innerHeight / 2 - y * scale;
+        const containerW = widthProp ?? window.innerWidth;
+        const containerH = heightProp ?? (isMobile ? window.innerHeight - 56 : window.innerHeight);
+        const tx = containerW / 2 - x * scale;
+        const ty = containerH / 2 - y * scale;
         svg.transition().duration(400).call((zoomRef.current as any).transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
       }
       svg.selectAll('.node-group').select('circle')
@@ -184,7 +213,7 @@ const ForceGraph: React.FC<ForceGraphProps> = (props) => {
       svg.selectAll('.node-group').select('.node-label').attr('opacity', 1);
       svg.selectAll('.links line').attr('opacity', 0.6);
     }
-  }, [focusedNodeId, nodes, nodeSizeByGroup]);
+  }, [focusedNodeId, nodes, nodeSizeByGroup, widthProp, heightProp, isMobile, highlightNodeIds, highlightEdges, metrics.edgeWidthScale]);
 
   return <svg ref={svgRef} style={svgStyle} />;
 };
