@@ -1,5 +1,5 @@
 # PostgreSQLセットアップ手順（実行例付き）
-
+ 
 ## 1. PostgreSQLインストール
 （Ubuntu例）
 ```bash
