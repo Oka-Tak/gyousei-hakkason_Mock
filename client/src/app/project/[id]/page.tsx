@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Money from '@/components/common/Money';
 import { formatCountJa } from '@/utils/format';
 

@@ -1,5 +1,5 @@
 # PostgreSQLセットアップ手順（実行例付き）
-
+ 
 ## 1. PostgreSQLインストール
 （Ubuntu例）
 ```bash
@@ -7,8 +7,8 @@ sudo apt update
 sudo apt install postgresql
 ```
 
-## 2. ユーザー・データベース作成　
-```bash
+## 2. ユーザー・データベース作成
+```bash 
 sudo -u postgres psql
 ```
 ```sql

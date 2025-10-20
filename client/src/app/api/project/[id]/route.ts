@@ -1,10 +1,10 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { loadProjectOverview, loadPolicyLaw, loadSubsidy, loadRelatedProjects, loadKpiSeries, loadKpiLinks } from '@/server/dataCatalog';
 import { normalizePercentSeries, normalizeUnit } from '@/server/unit';
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
-    const id = params.id;
+    const { id } = await context.params;
     const overviewAll = loadProjectOverview().filter(r => r['予算事業ID'] === id);
     // pick latest by 事業年度 if multiple
     const pickLatest = (rows: any[]) => {
