@@ -34,6 +34,7 @@ from __future__ import annotations
 import argparse
 import csv
 from collections import defaultdict
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Sequence, Tuple
@@ -41,13 +42,18 @@ from typing import Dict, Iterable, List, Sequence, Tuple
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
+try:
+    from huggingface_hub import login as hf_login
+except ImportError:  # pragma: no cover - optional dependency
+    hf_login = None
+
 BASE_DIR = Path(__file__).resolve().parent.parent
-DEFAULT_MODEL_NAME = "intfloat/multilingual-e5-small"
+DEFAULT_MODEL_NAME = "google/embeddinggemma-300m"
 DEFAULT_OUTPUT = BASE_DIR / "converted_data" / "project_semantic_embedding.csv"
 PROJECT_CSV = BASE_DIR / "converted_data" / "converted_project.csv"
 ORGANIZATION_CSV = BASE_DIR / "converted_data" / "converted_organization.csv"
 AGENCY_CSV = BASE_DIR / "DB_data" / "agency.csv"
-RELATED_SOURCE_CSV = BASE_DIR / "source_data" / "1-5_source.csv"
+RELATED_SOURCE_CSV = BASE_DIR / "source_data" / "1-5_source_.csv"
 
 ORG_FIELDS_ORDER = [
     "bureau_office",
@@ -77,7 +83,47 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help="output CSV path")
     parser.add_argument("--model-name", default=DEFAULT_MODEL_NAME, help="sentence-transformers model name")
     parser.add_argument("--max-keywords", type=int, default=64, help="limit number of keywords per project")
+    parser.add_argument(
+        "--hf-token",
+        default=None,
+        help="Hugging Face access token (defaults to $HF_TOKEN or $HUGGINGFACEHUB_API_TOKEN)",
+    )
+    parser.add_argument(
+        "--expected-dim",
+        type=int,
+        default=3072,
+        help="Expected embedding dimension for google/embeddinggemma-300m (set to None to disable check)",
+    )
     return parser.parse_args()
+
+
+def resolve_hf_token(arg_token: str | None) -> str | None:
+    """
+    Resolve Hugging Face token from CLI argument, environment variables, or local files.
+    Search order:
+      1. --hf-token argument (unless literal string "none")
+      2. Environment variables HF_TOKEN / HUGGINGFACEHUB_API_TOKEN
+      3. File `.hf_token` or `.env.hf_token` in repo root (first non-empty line)
+    """
+    token = (arg_token or "").strip() if arg_token else None
+    if token and token.lower() == "none":
+        return None
+    if token:
+        return token
+
+    for key in ("HF_TOKEN", "HUGGINGFACEHUB_API_TOKEN"):
+        env_val = os.getenv(key)
+        if env_val:
+            return env_val.strip()
+
+    for filename in (".hf_token", ".env.hf_token"):
+        path = BASE_DIR / filename
+        if path.exists():
+            with path.open("r", encoding="utf-8") as f:
+                line = f.readline().strip()
+                if line:
+                    return line
+    return None
 
 
 def read_agency_names() -> Dict[int, str]:
@@ -287,8 +333,10 @@ def build_payload(
     related_map: Dict[Tuple[int, int], List[Tuple[str, str]]],
     model_name: str,
     max_keywords: int,
+    hf_token: str | None,
+    expected_dim: int | None,
 ) -> List[Dict]:
-    model = SentenceTransformer(model_name)
+    model = SentenceTransformer(model_name, use_auth_token=hf_token or None)
     payload: List[Dict] = []
     texts: List[str] = []
     surfaces: List[str] = []
@@ -306,9 +354,19 @@ def build_payload(
             text = surface
         texts.append(text.replace("\n", " ").strip())
 
-    embeddings = model.encode(texts, normalize_embeddings=True, convert_to_numpy=True)
+    embeddings = model.encode(
+        texts,
+        normalize_embeddings=True,
+        convert_to_numpy=True,
+        show_progress_bar=True,
+    )
     if isinstance(embeddings, list):
         embeddings = np.asarray(embeddings)
+    if embeddings.ndim != 2:
+        raise RuntimeError(f"Expected embeddings to be 2-D, got shape {embeddings.shape}")
+    dim = embeddings.shape[1]
+    if expected_dim is not None and dim != expected_dim:
+        raise ValueError(f"Embedding dimension mismatch: expected {expected_dim}, got {dim}")
 
     for record, surface, keywords, vec in zip(records, surfaces, keywords_list, embeddings):
         payload.append({
@@ -345,7 +403,21 @@ def main() -> None:
     org_map = read_organization_map(agency_names)
     project_records = read_project_rows(args.budget_year)
     related_map = read_related_projects(args.budget_year)
-    payload = build_payload(project_records, org_map, related_map, args.model_name, args.max_keywords)
+    hf_token = resolve_hf_token(args.hf_token)
+    if hf_token and hf_login:
+        try:
+            hf_login(token=hf_token, add_to_git_credential=False)
+        except Exception as exc:  # pragma: no cover - login failure
+            raise RuntimeError(f"Hugging Face login failed: {exc}") from exc
+    payload = build_payload(
+        project_records,
+        org_map,
+        related_map,
+        args.model_name,
+        args.max_keywords,
+        hf_token,
+        args.expected_dim,
+    )
     write_csv(payload, args.model_id, args.output)
     print(f"Wrote {len(payload)} rows to {args.output}")
 
