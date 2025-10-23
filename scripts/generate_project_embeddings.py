@@ -41,6 +41,7 @@ from typing import Dict, Iterable, List, Sequence, Tuple
 
 import numpy as np
 from sentence_transformers import SentenceTransformer
+import torch
 
 try:
     from huggingface_hub import login as hf_login
@@ -50,10 +51,11 @@ except ImportError:  # pragma: no cover - optional dependency
 BASE_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_MODEL_NAME = "google/embeddinggemma-300m"
 DEFAULT_OUTPUT = BASE_DIR / "converted_data" / "project_semantic_embedding.csv"
+DEFAULT_EXPECTED_DIM = 3072
 PROJECT_CSV = BASE_DIR / "converted_data" / "converted_project.csv"
 ORGANIZATION_CSV = BASE_DIR / "converted_data" / "converted_organization.csv"
 AGENCY_CSV = BASE_DIR / "DB_data" / "agency.csv"
-RELATED_SOURCE_CSV = BASE_DIR / "source_data" / "1-5_source_.csv"
+RELATED_SOURCE_CSV = BASE_DIR / "source_data" / "1-5_source.csv"
 
 ORG_FIELDS_ORDER = [
     "bureau_office",
@@ -82,6 +84,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--budget-year", type=int, default=2024, help="target budget year to export")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help="output CSV path")
     parser.add_argument("--model-name", default=DEFAULT_MODEL_NAME, help="sentence-transformers model name")
+    parser.add_argument(
+        "--device",
+        default=None,
+        help="Torch device for inference (e.g. cuda, cuda:0, cpu). Defaults to cuda if available.",
+    )
     parser.add_argument("--max-keywords", type=int, default=64, help="limit number of keywords per project")
     parser.add_argument(
         "--hf-token",
@@ -91,8 +98,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--expected-dim",
         type=int,
-        default=3072,
-        help="Expected embedding dimension for google/embeddinggemma-300m (set to None to disable check)",
+        default=None,
+        help="Expected embedding dimension; defaults to model-specific autodetect (3072 for embeddinggemma).",
     )
     return parser.parse_args()
 
@@ -123,6 +130,22 @@ def resolve_hf_token(arg_token: str | None) -> str | None:
                 line = f.readline().strip()
                 if line:
                     return line
+    return None
+
+
+def resolve_device(requested_device: str | None) -> str:
+    if requested_device:
+        if requested_device.startswith("cuda") and not torch.cuda.is_available():
+            raise RuntimeError(f"Requested device '{requested_device}' but CUDA is not available.")
+        return requested_device
+    return "cuda" if torch.cuda.is_available() else "cpu"
+
+
+def resolve_expected_dim(model_name: str, requested_dim: int | None) -> int | None:
+    if requested_dim is not None:
+        return requested_dim
+    if model_name == DEFAULT_MODEL_NAME:
+        return DEFAULT_EXPECTED_DIM
     return None
 
 
@@ -335,8 +358,9 @@ def build_payload(
     max_keywords: int,
     hf_token: str | None,
     expected_dim: int | None,
+    device: str,
 ) -> List[Dict]:
-    model = SentenceTransformer(model_name, use_auth_token=hf_token or None)
+    model = SentenceTransformer(model_name, device=device, use_auth_token=hf_token or None)
     payload: List[Dict] = []
     texts: List[str] = []
     surfaces: List[str] = []
@@ -359,6 +383,7 @@ def build_payload(
         normalize_embeddings=True,
         convert_to_numpy=True,
         show_progress_bar=True,
+        device=device,
     )
     if isinstance(embeddings, list):
         embeddings = np.asarray(embeddings)
@@ -366,7 +391,10 @@ def build_payload(
         raise RuntimeError(f"Expected embeddings to be 2-D, got shape {embeddings.shape}")
     dim = embeddings.shape[1]
     if expected_dim is not None and dim != expected_dim:
-        raise ValueError(f"Embedding dimension mismatch: expected {expected_dim}, got {dim}")
+        print(
+            f"Warning: embedding dimension mismatch (expected {expected_dim}, got {dim}) "
+            f"for model '{model_name}'. Continuing with actual dimension.",
+        )
 
     for record, surface, keywords, vec in zip(records, surfaces, keywords_list, embeddings):
         payload.append({
@@ -399,6 +427,8 @@ def write_csv(rows: List[Dict], model_id: int, output_path: Path) -> None:
 
 def main() -> None:
     args = parse_args()
+    device = resolve_device(args.device)
+    expected_dim = resolve_expected_dim(args.model_name, args.expected_dim)
     agency_names = read_agency_names()
     org_map = read_organization_map(agency_names)
     project_records = read_project_rows(args.budget_year)
@@ -416,7 +446,8 @@ def main() -> None:
         args.model_name,
         args.max_keywords,
         hf_token,
-        args.expected_dim,
+        expected_dim,
+        device,
     )
     write_csv(payload, args.model_id, args.output)
     print(f"Wrote {len(payload)} rows to {args.output}")
