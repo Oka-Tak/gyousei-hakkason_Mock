@@ -8,6 +8,16 @@ export class OpenAIConfigError extends Error {
   }
 }
 
+export class SemanticSearchServiceError extends Error {
+  code: string;
+
+  constructor(message: string, code = 'SEMANTIC_SEARCH_FAILURE') {
+    super(message);
+    this.name = 'SemanticSearchServiceError';
+    this.code = code;
+  }
+}
+
 type MatchRow = {
   project_id: number;
   budget_year: number;
@@ -68,25 +78,69 @@ async function getQueryEmbedding(query: string): Promise<number[]> {
   return embedding;
 }
 
-export async function searchProjectsSemantically(input: { query: string; limit?: number; threshold?: number }): Promise<ProjectSemanticMatch[]> {
-  const { query, limit = 8, threshold } = input;
-  const embedding = await getQueryEmbedding(query);
-
+async function fallbackProjectSearch(query: string, limit: number): Promise<ProjectSemanticMatch[]> {
   const supabase = getSupabase();
-  const { data, error } = await supabase.rpc(
-    RPC_NAME,
-    {
-      query_embedding: embedding,
-      match_count: Math.min(Math.max(limit, 1), 20),
-      match_threshold: typeof threshold === 'number' ? threshold : DEFAULT_THRESHOLD,
-    } as never,
-  );
+  const { data, error } = await supabase
+    .from('project')
+    .select('project_id, project_name, budget_year')
+    .ilike('project_name', `%${query}%`)
+    .limit(limit);
   if (error) {
-    throw error;
+    throw new SemanticSearchServiceError(`プロジェクト名検索に失敗しました: ${error.message}`, error.code ?? 'SUPABASE_PROJECT_QUERY_FAILED');
   }
 
-  const rows = (data ?? []) as MatchRow[];
-  if (!rows.length) return [] as ProjectSemanticMatch[];
+  const rows = (data ?? []) as Array<{ project_id: number; project_name: string | null; budget_year: number | null }>;
+  if (!rows.length) return [];
+
+  return rows.map((row) => ({
+    projectId: Number(row.project_id),
+    budgetYear: Number(row.budget_year ?? 0) || 0,
+    score: 0.1,
+    projectName: row.project_name ?? '名称不明',
+  }));
+}
+
+export async function searchProjectsSemantically(input: { query: string; limit?: number; threshold?: number }): Promise<ProjectSemanticMatch[]> {
+  const { query, limit = 8, threshold } = input;
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+
+  const supabase = getSupabase();
+
+  let rows: MatchRow[] = [];
+  let encounteredError: Error | null = null;
+
+  try {
+    const embedding = await getQueryEmbedding(trimmed);
+    const { data, error } = await supabase.rpc(
+      RPC_NAME,
+      {
+        query_embedding: embedding,
+        match_count: Math.min(Math.max(limit, 1), 20),
+        match_threshold: typeof threshold === 'number' ? threshold : DEFAULT_THRESHOLD,
+      } as never,
+    );
+
+    if (error) {
+      encounteredError = error;
+    } else {
+      rows = (data ?? []) as MatchRow[];
+    }
+  } catch (err) {
+    encounteredError = err instanceof Error ? err : new Error(String(err));
+  }
+
+  if (encounteredError) {
+    console.warn('[semanticSearch] RPC fallback triggered:', encounteredError.message);
+    return fallbackProjectSearch(trimmed, Math.min(Math.max(limit, 1), 20));
+  }
+
+  if (!rows.length) {
+    // fallback to simple contains search when embeddings yield nothing
+    const fallbackResults = await fallbackProjectSearch(trimmed, Math.min(Math.max(limit, 1), 20));
+    if (fallbackResults.length) return fallbackResults;
+    return [] as ProjectSemanticMatch[];
+  }
 
   const budgetYears = new Set(rows.map(r => r.budget_year));
 
