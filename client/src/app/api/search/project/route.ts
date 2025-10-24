@@ -15,11 +15,13 @@ const QuerySchema = z.object({
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const parseResult = QuerySchema.safeParse({
-      q: searchParams.get('q'),
-      limit: searchParams.get('limit'),
-      threshold: searchParams.get('threshold'),
-    });
+    const rawLimit = searchParams.get('limit');
+    const rawThreshold = searchParams.get('threshold');
+    const input: Record<string, string | null> = { q: searchParams.get('q') };
+    if (rawLimit !== null) input.limit = rawLimit;
+    if (rawThreshold !== null) input.threshold = rawThreshold;
+
+    const parseResult = QuerySchema.safeParse(input);
 
     if (!parseResult.success) {
       return NextResponse.json({ error: parseResult.error.issues }, { status: 400 });
@@ -38,4 +40,3 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: message }, { status });
   }
 }
-
