@@ -164,6 +164,9 @@ export async function searchProjectsSemantically(input: { query: string; limit?:
   const trimmed = query.trim();
   if (!trimmed) return [];
 
+  const startedAt = Date.now();
+  console.log('[semanticSearch] start', { query: trimmed, limit, threshold });
+
   const supabase = getSupabase();
 
   let rows: MatchRow[] = [];
@@ -221,7 +224,7 @@ export async function searchProjectsSemantically(input: { query: string; limit?:
   }
 
   if (encounteredError) {
-    console.warn('[semanticSearch] RPC fallback triggered:', encounteredError.message);
+    console.warn('[semanticSearch] RPC fallback triggered', { query: trimmed, error: encounteredError.message });
     return fallbackProjectSearch(trimmed, Math.min(Math.max(limit, 1), 20));
   }
 
@@ -262,5 +265,13 @@ export async function searchProjectsSemantically(input: { query: string; limit?:
     project_name: row.project_name ?? projectNameById.get(Number(row.project_id)) ?? null,
   }));
 
-  return normalizeProjects(normalized, Math.min(Math.max(limit, 1), 20));
+  const result = normalizeProjects(normalized, Math.min(Math.max(limit, 1), 20));
+  console.log('[semanticSearch] success', {
+    query: trimmed,
+    durationMs: Date.now() - startedAt,
+    candidateCount: rows.length,
+    uniqueCount: result.length,
+    topScore: result[0]?.score ?? null,
+  });
+  return result;
 }
