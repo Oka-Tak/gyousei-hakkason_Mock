@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMainGraphData } from '@/features/graph/hooks/useGraphData';
 import Money from '@/components/common/Money';
 
@@ -123,7 +123,11 @@ const ComparePage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const leftSearchAbort = useRef<AbortController | null>(null);
+  const rightSearchAbort = useRef<AbortController | null>(null);
+
   const resetLeftProjectState = useCallback(() => {
+    leftSearchAbort.current?.abort();
     setLeftProjectSelection(null);
     setLeftSuggestions([]);
     setLeftSearchError(null);
@@ -131,109 +135,65 @@ const ComparePage: React.FC = () => {
   }, []);
 
   const resetRightProjectState = useCallback(() => {
+    rightSearchAbort.current?.abort();
     setRightProjectSelection(null);
     setRightSuggestions([]);
     setRightSearchError(null);
     setRightSearchLoading(false);
   }, []);
 
-  useEffect(() => {
-    if (leftType !== 'project') {
-      resetLeftProjectState();
-      return;
-    }
+  const performProjectSearch = useCallback(
+    async (side: 'left' | 'right') => {
+      const isLeft = side === 'left';
+      const query = (isLeft ? leftInput : rightInput).trim();
+      const currentType = isLeft ? leftType : rightType;
+      const setLoading = isLeft ? setLeftSearchLoading : setRightSearchLoading;
+      const setErrorState = isLeft ? setLeftSearchError : setRightSearchError;
+      const setSuggestions = isLeft ? setLeftSuggestions : setRightSuggestions;
+      const abortRef = isLeft ? leftSearchAbort : rightSearchAbort;
 
-    if (leftProjectSelection && leftInput.trim() === leftProjectSelection.label.trim()) {
-      setLeftSuggestions([]);
-      setLeftSearchError(null);
-      setLeftSearchLoading(false);
-      return;
-    }
+      if (currentType !== 'project') return;
 
-    const query = leftInput.trim();
-    if (!query) {
-      setLeftSuggestions([]);
-      setLeftSearchError(null);
-      setLeftSearchLoading(false);
-      return;
-    }
-    if (query.length < MIN_QUERY_LENGTH) {
-      setLeftSuggestions([]);
-      setLeftSearchError('2文字以上で検索してください');
-      setLeftSearchLoading(false);
-      return;
-    }
-
-    const controller = new AbortController();
-    const timer = setTimeout(async () => {
-      try {
-        setLeftSearchLoading(true);
-        setLeftSearchError(null);
-        const matches = await searchProjects(query, controller.signal);
-        setLeftSuggestions(matches);
-        if (!matches.length) setLeftSearchError('候補が見つかりませんでした');
-      } catch (err) {
-        if (err instanceof DOMException && err.name === 'AbortError') return;
-        setLeftSearchError(extractErrorMessage(err));
-      } finally {
-        setLeftSearchLoading(false);
+      if (!query) {
+        abortRef.current?.abort();
+        setSuggestions([]);
+        setErrorState(null);
+        setLoading(false);
+        return;
       }
-    }, 350);
 
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [leftInput, leftType, leftProjectSelection, resetLeftProjectState]);
-
-  useEffect(() => {
-    if (rightType !== 'project') {
-      resetRightProjectState();
-      return;
-    }
-
-    if (rightProjectSelection && rightInput.trim() === rightProjectSelection.label.trim()) {
-      setRightSuggestions([]);
-      setRightSearchError(null);
-      setRightSearchLoading(false);
-      return;
-    }
-
-    const query = rightInput.trim();
-    if (!query) {
-      setRightSuggestions([]);
-      setRightSearchError(null);
-      setRightSearchLoading(false);
-      return;
-    }
-    if (query.length < MIN_QUERY_LENGTH) {
-      setRightSuggestions([]);
-      setRightSearchError('2文字以上で検索してください');
-      setRightSearchLoading(false);
-      return;
-    }
-
-    const controller = new AbortController();
-    const timer = setTimeout(async () => {
-      try {
-        setRightSearchLoading(true);
-        setRightSearchError(null);
-        const matches = await searchProjects(query, controller.signal);
-        setRightSuggestions(matches);
-        if (!matches.length) setRightSearchError('候補が見つかりませんでした');
-      } catch (err) {
-        if (err instanceof DOMException && err.name === 'AbortError') return;
-        setRightSearchError(extractErrorMessage(err));
-      } finally {
-        setRightSearchLoading(false);
+      if (query.length < MIN_QUERY_LENGTH) {
+        abortRef.current?.abort();
+        setSuggestions([]);
+        setErrorState('2文字以上で検索してください');
+        setLoading(false);
+        return;
       }
-    }, 350);
 
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [rightInput, rightType, rightProjectSelection, resetRightProjectState]);
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      setLoading(true);
+      setErrorState(null);
+
+      try {
+        const matches = await searchProjects(query, controller.signal);
+        setSuggestions(matches);
+        if (!matches.length) {
+          setErrorState('候補が見つかりませんでした');
+        }
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        setErrorState(extractErrorMessage(err));
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      }
+    },
+    [leftInput, rightInput, leftType, rightType],
+  );
 
   const runComparison = useCallback(
     async (leftReq: CompareRequest, rightReq: CompareRequest, updateUrl = false) => {
@@ -326,6 +286,8 @@ const ComparePage: React.FC = () => {
     setRightType('agency');
     setLeftInput('');
     setRightInput('');
+    leftSearchAbort.current?.abort();
+    rightSearchAbort.current?.abort();
     resetLeftProjectState();
     resetRightProjectState();
     setLeftSummary(null);
@@ -383,6 +345,11 @@ const ComparePage: React.FC = () => {
     }
   }, [runComparison]);
 
+  useEffect(() => () => {
+    leftSearchAbort.current?.abort();
+    rightSearchAbort.current?.abort();
+  }, []);
+
   const fields = useMemo(() => (
     [
       {
@@ -401,6 +368,7 @@ const ComparePage: React.FC = () => {
         loading: leftSearchLoading,
         error: leftSearchError,
         setError: setLeftSearchError,
+        performSearch: () => performProjectSearch('left'),
       },
       {
         side: 'right' as const,
@@ -418,6 +386,7 @@ const ComparePage: React.FC = () => {
         loading: rightSearchLoading,
         error: rightSearchError,
         setError: setRightSearchError,
+        performSearch: () => performProjectSearch('right'),
       },
     ]
   ), [
@@ -433,6 +402,7 @@ const ComparePage: React.FC = () => {
     rightSuggestions,
     rightSearchLoading,
     rightSearchError,
+    performProjectSearch,
   ]);
 
   return (
@@ -467,6 +437,7 @@ const ComparePage: React.FC = () => {
                     onClick={() => {
                       cfg.setType(type);
                       cfg.setError(null);
+                      (cfg.side === 'left' ? leftSearchAbort : rightSearchAbort).current?.abort();
                       if (type === 'agency') {
                         cfg.setProjectSelection(null);
                         cfg.setSuggestions([]);
@@ -482,66 +453,99 @@ const ComparePage: React.FC = () => {
                   </button>
                 ))}
               </div>
-              <div style={{ position: 'relative' }}>
-                <input
-                  list={cfg.type === 'agency' ? 'agency-list' : undefined}
-                  placeholder={cfg.type === 'agency' ? '例: 総務省' : 'プロジェクト名やキーワード'}
-                  value={cfg.input}
-                  onChange={(e) => cfg.setInput(e.target.value)}
-                  style={{
-                    width: '100%',
-                    border: '1px solid #cbd5e1',
-                    borderRadius: 8,
-                    padding: '8px 10px',
-                  }}
-                />
-                {cfg.type === 'project' && (cfg.loading || cfg.suggestions.length > 0 || cfg.error) && (
-                  <div
+              <div style={{ display: 'flex', gap: 6, alignItems: 'stretch' }}>
+                <div style={{ position: 'relative', flex: 1 }}>
+                  <input
+                    list={cfg.type === 'agency' ? 'agency-list' : undefined}
+                    placeholder={cfg.type === 'agency' ? '例: 総務省' : 'プロジェクト名やキーワード'}
+                    value={cfg.input}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      cfg.setInput(val);
+                      if (cfg.type === 'project') {
+                        (cfg.side === 'left' ? leftSearchAbort : rightSearchAbort).current?.abort();
+                        cfg.setSuggestions([]);
+                        cfg.setError(null);
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && cfg.type === 'project') {
+                        e.preventDefault();
+                        cfg.performSearch();
+                      }
+                    }}
                     style={{
-                      position: 'absolute',
-                      top: 'calc(100% + 4px)',
-                      left: 0,
-                      right: 0,
-                      background: '#fff',
-                      border: '1px solid #e5e7eb',
+                      width: '100%',
+                      border: '1px solid #cbd5e1',
                       borderRadius: 8,
-                      boxShadow: '0 8px 16px rgba(15, 23, 42, 0.08)',
-                      zIndex: 5,
-                      maxHeight: 240,
-                      overflowY: 'auto',
+                      padding: '8px 10px',
+                    }}
+                  />
+                  {cfg.type === 'project' && (cfg.loading || cfg.suggestions.length > 0 || cfg.error) && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: 'calc(100% + 4px)',
+                        left: 0,
+                        right: 0,
+                        background: '#fff',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: 8,
+                        boxShadow: '0 12px 24px rgba(15, 23, 42, 0.12)',
+                        zIndex: 10,
+                        maxHeight: 220,
+                        overflowY: 'auto',
+                      }}
+                    >
+                      {cfg.loading && <div style={{ padding: '10px 12px', fontSize: 12, color: '#475569' }}>検索中...</div>}
+                      {!cfg.loading && cfg.suggestions.map((suggestion) => (
+                        <button
+                          key={`${suggestion.projectId}-${suggestion.label}`}
+                          type="button"
+                          onClick={() => {
+                            cfg.setProjectSelection(suggestion);
+                            cfg.setInput(suggestion.label);
+                            cfg.setSuggestions([]);
+                            cfg.setError(null);
+                          }}
+                          style={{
+                            width: '100%',
+                            padding: '10px 12px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'flex-start',
+                            gap: 4,
+                            border: 'none',
+                            background: '#fff',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <div style={{ fontWeight: 600, color: '#0f172a' }}>{suggestion.label}</div>
+                          <div style={{ fontSize: 11, color: '#475569' }}>{`一致度 ${(suggestion.score * 100).toFixed(1)}%`}</div>
+                        </button>
+                      ))}
+                      {!cfg.loading && cfg.error && (
+                        <div style={{ padding: '10px 12px', fontSize: 12, color: '#dc2626' }}>{cfg.error}</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {cfg.type === 'project' && (
+                  <button
+                    type="button"
+                    onClick={cfg.performSearch}
+                    style={{
+                      border: '1px solid #0f766e',
+                      background: '#0f766e',
+                      color: '#fff',
+                      borderRadius: 8,
+                      padding: '8px 12px',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
                     }}
                   >
-                    {cfg.loading && <div style={{ padding: '10px 12px', fontSize: 12, color: '#475569' }}>検索中...</div>}
-                    {!cfg.loading && cfg.suggestions.map((suggestion) => (
-                      <button
-                        key={`${suggestion.projectId}-${suggestion.label}`}
-                        type="button"
-                        onClick={() => {
-                          cfg.setProjectSelection(suggestion);
-                          cfg.setInput(suggestion.label);
-                          cfg.setSuggestions([]);
-                          cfg.setError(null);
-                        }}
-                        style={{
-                          width: '100%',
-                          padding: '10px 12px',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'flex-start',
-                          gap: 4,
-                          border: 'none',
-                          background: '#fff',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <div style={{ fontWeight: 600, color: '#0f172a' }}>{suggestion.label}</div>
-                        <div style={{ fontSize: 11, color: '#475569' }}>{`一致度 ${(suggestion.score * 100).toFixed(1)}%`}</div>
-                      </button>
-                    ))}
-                    {!cfg.loading && cfg.error && (
-                      <div style={{ padding: '10px 12px', fontSize: 12, color: '#dc2626' }}>{cfg.error}</div>
-                    )}
-                  </div>
+                    候補検索
+                  </button>
                 )}
               </div>
               {cfg.type === 'project' && cfg.projectSelection && (
