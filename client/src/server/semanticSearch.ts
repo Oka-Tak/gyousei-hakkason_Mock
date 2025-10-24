@@ -78,24 +78,45 @@ async function getQueryEmbedding(query: string): Promise<number[]> {
   return embedding;
 }
 
+function toNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  const parsed = typeof value === 'string' ? Number(value) : NaN;
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function calculateScore(row: MatchRow): number {
-  if (typeof row.similarity === 'number' && !Number.isNaN(row.similarity)) return row.similarity;
-  if (typeof row.score === 'number' && !Number.isNaN(row.score)) return row.score;
+  const similarity = toNumber(row.similarity ?? row.score);
+  if (similarity !== null) {
+    // Supabase match RPC returns cosine similarity (0-1) when using pgvector.
+    if (similarity >= 0 && similarity <= 1) return similarity;
+    if (similarity > 1) return 1 / (1 + similarity);
+  }
+  const distance = toNumber((row as any).distance ?? (row as any).metric);
+  if (distance !== null) {
+    const normalized = 1 - Math.min(Math.max(distance, 0), 1);
+    return normalized;
+  }
   return 0;
 }
 
 function normalizeProjects(rows: MatchRow[], limit: number): ProjectSemanticMatch[] {
+  const byId = new Map<number, MatchRow>();
   const byName = new Map<string, MatchRow>();
+
   rows.forEach((row) => {
-    const name = (row.project_name || '').trim().toLowerCase();
-    const key = name || `id::${row.project_id}`;
-    const current = byName.get(key);
-    if (!current || calculateScore(row) > calculateScore(current)) {
-      byName.set(key, row);
-    }
+    const id = Number(row.project_id);
+    if (!Number.isFinite(id)) return;
+    const nameKey = (row.project_name || '').trim().toLowerCase() || `id::${id}`;
+
+    const score = calculateScore(row);
+    const existingById = byId.get(id);
+    if (!existingById || score > calculateScore(existingById)) byId.set(id, row);
+
+    const existingByName = byName.get(nameKey);
+    if (!existingByName || score > calculateScore(existingByName)) byName.set(nameKey, row);
   });
 
-  return Array.from(byName.values())
+  return Array.from(new Set([...byName.values(), ...byId.values()]))
     .map((row) => {
       const pid = Number(row.project_id);
       return {
@@ -119,7 +140,7 @@ async function fallbackProjectSearch(query: string, limit: number): Promise<Proj
     .select('project_id, project_name, budget_year')
     .ilike('project_name', `%${query}%`)
     .order('project_name', { ascending: true })
-    .limit(limit * 2);
+    .limit(limit * 4);
   if (error) {
     throw new SemanticSearchServiceError(`プロジェクト名検索に失敗しました: ${error.message}`, error.code ?? 'SUPABASE_PROJECT_QUERY_FAILED');
   }
@@ -131,7 +152,7 @@ async function fallbackProjectSearch(query: string, limit: number): Promise<Proj
     .map((row) => ({
       projectId: Number(row.project_id),
       budgetYear: Number(row.budget_year ?? 0) || 0,
-      score: 0.05,
+      score: 0.15,
       projectName: row.project_name ?? '名称不明',
     }))
     .filter((match, index, self) => self.findIndex((m) => m.projectName === match.projectName) === index)
@@ -154,6 +175,9 @@ export async function searchProjectsSemantically(input: { query: string; limit?:
     const thresholdsToTry = Array.from(
       new Set([
         typeof threshold === 'number' ? threshold : DEFAULT_THRESHOLD,
+        0.8,
+        0.7,
+        0.6,
         0.5,
         0.35,
         0.2,
@@ -161,12 +185,15 @@ export async function searchProjectsSemantically(input: { query: string; limit?:
       ]),
     );
 
+    const aggregated: MatchRow[] = [];
+    const seenIds = new Set<number>();
+
     for (const thr of thresholdsToTry) {
       const { data, error } = await supabase.rpc(
         RPC_NAME,
         {
           query_embedding: embedding,
-          match_count: desired * 3,
+          match_count: desired * 5,
           match_threshold: thr,
         } as never,
       );
@@ -177,11 +204,18 @@ export async function searchProjectsSemantically(input: { query: string; limit?:
       }
 
       const candidateRows = (data ?? []) as MatchRow[];
-      if (candidateRows.length) {
-        rows = candidateRows;
-        break;
-      }
+      candidateRows.forEach((row) => {
+        const pid = Number(row.project_id);
+        if (!Number.isFinite(pid)) return;
+        if (seenIds.has(pid)) return;
+        seenIds.add(pid);
+        aggregated.push(row);
+      });
+
+      if (aggregated.length >= desired) break;
     }
+
+    rows = aggregated;
   } catch (err) {
     encounteredError = err instanceof Error ? err : new Error(String(err));
   }
