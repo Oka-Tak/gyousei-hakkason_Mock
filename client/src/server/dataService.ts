@@ -47,7 +47,7 @@ export async function fetchMainData() {
   const supabase = getSupabase();
   const { data: projects, error: projectError } = await supabase
     .from('project')
-    .select('budget_year, project_year, organization_id, initial_budget_total, adjustment_total, carryover_from_previous_total, contingency_total')
+    .select('project_id, project_name, budget_year, project_year, organization_id, initial_budget_total, adjustment_total, carryover_from_previous_total, contingency_total')
     .eq('budget_year', 2024)
     .limit(MAIN_LIMIT);
   if (projectError) throw projectError;

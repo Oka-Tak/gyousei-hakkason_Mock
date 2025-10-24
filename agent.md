@@ -60,7 +60,7 @@
 - `/explore`（`src/app/explore/page.tsx`）: 深さ・予算フィルタとノード間パス探索
 - `/agencies`（`src/app/agencies/page.tsx`）: 省庁ごとのミニグラフと統計タイル
 - `/insight`（`src/app/insight/page.tsx`）: 「どこから・いくら・だれが」の横断分析
-- `/compare`（`src/app/compare/page.tsx`）: 省庁 A/B 比較（総額・内訳・受取先）
+- `/compare`（`src/app/compare/page.tsx`）: 府省庁・プロジェクトの比較（セマンティック検索経由でプロジェクト候補を取得、総額・内訳・受取先を並列表示）
 - `/recipients`（`src/app/recipients/page.tsx`）: 省庁別受取先ランキング
 - `/company`（`src/app/company/page.tsx`）: 法人番号／名称から受取先概要を検索
 - `/project/[id]`（`src/app/project/[id]/page.tsx`）: 事業概要・政策連携・補助率・関連事業・KPI

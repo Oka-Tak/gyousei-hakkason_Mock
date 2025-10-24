@@ -119,6 +119,57 @@ export async function fetchTopRecipientsByAgency(agencyName: string, limit = 10)
   return result;
 }
 
+export async function fetchTopRecipientsByProject(projectId: number, limit = 10): Promise<RecipientAgg[]> {
+  const numericId = Number(projectId);
+  const key = `project::${numericId}::${limit}`;
+  const now = Date.now();
+  const cached = recipientCache.get(key);
+  if (cached && now - cached.at < RECIPIENT_TTL_MS) return cached.data;
+
+  if (!Number.isFinite(numericId)) {
+    throw new Error('Invalid project id for recipient lookup');
+  }
+
+  const supabase = getSupabase();
+
+  const { data: blocks, error: blockErr } = await supabase
+    .from('project_spending_block')
+    .select('block_id')
+    .eq('project_id', numericId);
+  if (blockErr) throw blockErr;
+  const blockRows = (blocks ?? []) as SpendingBlockRow[];
+  if (!blockRows.length) {
+    recipientCache.set(key, { at: now, data: [] });
+    return [];
+  }
+  const blockIds = blockRows.map(b => b.block_id);
+
+  const { data: spendings, error: spendErr } = await supabase
+    .from('project_spending')
+    .select('block_id, recipient_name, corporate_number, amount')
+    .in('block_id', blockIds);
+  if (spendErr) throw spendErr;
+
+  const agg = new Map<string, { name: string; corp: string | null; total: number }>();
+  const spendingRows = (spendings ?? []) as SpendingRow[];
+  spendingRows.forEach((sp) => {
+    const name = sp.recipient_name || '不明';
+    const corp = sp.corporate_number || null;
+    const key2 = `${name}::${corp ?? ''}`;
+    if (!agg.has(key2)) agg.set(key2, { name, corp, total: 0 });
+    const rec = agg.get(key2)!;
+    rec.total += Number(sp.amount || 0);
+  });
+
+  const result: RecipientAgg[] = Array.from(agg.values())
+    .map(r => ({ recipient_name: r.name, corporate_number: r.corp, total_amount: r.total, projects_count: spendingRows.length ? 1 : 0 }))
+    .sort((a, b) => (b.total_amount || 0) - (a.total_amount || 0))
+    .slice(0, limit);
+
+  recipientCache.set(key, { at: Date.now(), data: result });
+  return result;
+}
+
 type CompanyOverview = {
   recipient_name: string;
   corporate_number: string | null;
