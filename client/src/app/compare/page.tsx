@@ -51,8 +51,19 @@ async function searchProjects(query: string, signal?: AbortSignal): Promise<Proj
   const params = new URLSearchParams({ q: query, limit: '8' });
   const res = await fetch(`/api/search/project?${params.toString()}`, { signal });
   if (!res.ok) {
-    const message = await res.text();
-    throw new Error(message || `search ${res.status}`);
+    const raw = await res.text();
+    let message = `検索に失敗しました (status ${res.status})`;
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed?.error === 'string') message = parsed.error;
+        else if (parsed?.error?.message) message = parsed.error.message;
+        else message = raw;
+      } catch {
+        message = raw;
+      }
+    }
+    throw new Error(message);
   }
   const json = await res.json();
   const matches = (json.matches || []) as Array<{ projectId: number; projectName: string; score: number; surface?: string | null }>;

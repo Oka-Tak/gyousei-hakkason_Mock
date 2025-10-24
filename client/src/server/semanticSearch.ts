@@ -1,6 +1,13 @@
 import OpenAI from 'openai';
 import { getSupabase } from './supabaseClient';
 
+export class OpenAIConfigError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'OpenAIConfigError';
+  }
+}
+
 type MatchRow = {
   project_id: number;
   budget_year: number;
@@ -28,12 +35,20 @@ const DEFAULT_THRESHOLD = Number(process.env.PROJECT_MATCH_THRESHOLD ?? 0.7);
 
 let openaiClient: OpenAI | null = null;
 
+function assertValidApiKey(rawKey: string | undefined) {
+  const apiKey = (rawKey || '').trim();
+  if (!apiKey) {
+    throw new OpenAIConfigError('OpenAI APIキーが設定されていません。client/.env.local の OPENAI_API_KEY に sk- で始まるキーを設定してください。');
+  }
+  if (apiKey === 'your_openai_api_key_here' || !apiKey.startsWith('sk-')) {
+    throw new OpenAIConfigError('OpenAI APIキーが不正です。sk- で始まる実際のキーを OPENAI_API_KEY に設定してください。');
+  }
+  return apiKey;
+}
+
 function getOpenAIClient() {
   if (openaiClient) return openaiClient;
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error('OPENAI_API_KEY environment variable is required for semantic search');
-  }
+  const apiKey = assertValidApiKey(process.env.OPENAI_API_KEY);
   openaiClient = new OpenAI({ apiKey });
   return openaiClient;
 }

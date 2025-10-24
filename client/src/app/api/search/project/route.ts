@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { searchProjectsSemantically } from '@/server/semanticSearch';
+import { searchProjectsSemantically, OpenAIConfigError } from '@/server/semanticSearch';
 
 const QuerySchema = z.object({
   q: z.string().min(1, '検索語を入力してください'),
@@ -36,7 +36,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ matches });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    const status = message.includes('OPENAI_API_KEY') ? 500 : 500;
-    return NextResponse.json({ error: message }, { status });
+    if (error instanceof OpenAIConfigError) {
+      return NextResponse.json({ error: { code: 'OPENAI_API_KEY_MISSING', message } }, { status: 503 });
+    }
+    return NextResponse.json({ error: { message } }, { status: 500 });
   }
 }
