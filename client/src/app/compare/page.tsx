@@ -58,7 +58,7 @@ async function fetchRecipients(target: CompareRequest, limit = 5): Promise<RecIt
 }
 
 async function searchProjects(query: string, signal?: AbortSignal): Promise<ProjectMatch[]> {
-  const params = new URLSearchParams({ q: query, limit: '8' });
+  const params = new URLSearchParams({ q: query, limit: '20' });
   const res = await fetch(`/api/search/project?${params.toString()}`, { signal });
   if (!res.ok) {
     const raw = await res.text();

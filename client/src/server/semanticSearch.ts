@@ -41,7 +41,7 @@ export type ProjectSemanticMatch = {
 
 const OPENAI_MODEL = process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small';
 const RPC_NAME = process.env.SUPABASE_PROJECT_MATCH_RPC || 'match_project_semantic';
-const DEFAULT_THRESHOLD = Number(process.env.PROJECT_MATCH_THRESHOLD ?? 0.7);
+const DEFAULT_THRESHOLD = Number(process.env.PROJECT_MATCH_THRESHOLD ?? 0.55);
 
 let openaiClient: OpenAI | null = null;
 
@@ -78,13 +78,48 @@ async function getQueryEmbedding(query: string): Promise<number[]> {
   return embedding;
 }
 
+function calculateScore(row: MatchRow): number {
+  if (typeof row.similarity === 'number' && !Number.isNaN(row.similarity)) return row.similarity;
+  if (typeof row.score === 'number' && !Number.isNaN(row.score)) return row.score;
+  return 0;
+}
+
+function normalizeProjects(rows: MatchRow[], limit: number): ProjectSemanticMatch[] {
+  const byName = new Map<string, MatchRow>();
+  rows.forEach((row) => {
+    const name = (row.project_name || '').trim().toLowerCase();
+    const key = name || `id::${row.project_id}`;
+    const current = byName.get(key);
+    if (!current || calculateScore(row) > calculateScore(current)) {
+      byName.set(key, row);
+    }
+  });
+
+  return Array.from(byName.values())
+    .map((row) => {
+      const pid = Number(row.project_id);
+      return {
+        projectId: pid,
+        budgetYear: Number(row.budget_year ?? 0) || 0,
+        score: calculateScore(row),
+        projectName: row.project_name ?? `プロジェクトID ${pid}`,
+        surface: row.surface ?? null,
+        synonyms: row.synonyms ?? null,
+        keywords: row.keywords ?? null,
+      } satisfies ProjectSemanticMatch;
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+}
+
 async function fallbackProjectSearch(query: string, limit: number): Promise<ProjectSemanticMatch[]> {
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from('project')
     .select('project_id, project_name, budget_year')
     .ilike('project_name', `%${query}%`)
-    .limit(limit);
+    .order('project_name', { ascending: true })
+    .limit(limit * 2);
   if (error) {
     throw new SemanticSearchServiceError(`プロジェクト名検索に失敗しました: ${error.message}`, error.code ?? 'SUPABASE_PROJECT_QUERY_FAILED');
   }
@@ -92,12 +127,15 @@ async function fallbackProjectSearch(query: string, limit: number): Promise<Proj
   const rows = (data ?? []) as Array<{ project_id: number; project_name: string | null; budget_year: number | null }>;
   if (!rows.length) return [];
 
-  return rows.map((row) => ({
-    projectId: Number(row.project_id),
-    budgetYear: Number(row.budget_year ?? 0) || 0,
-    score: 0.1,
-    projectName: row.project_name ?? '名称不明',
-  }));
+  return rows
+    .map((row) => ({
+      projectId: Number(row.project_id),
+      budgetYear: Number(row.budget_year ?? 0) || 0,
+      score: 0.05,
+      projectName: row.project_name ?? '名称不明',
+    }))
+    .filter((match, index, self) => self.findIndex((m) => m.projectName === match.projectName) === index)
+    .slice(0, limit);
 }
 
 export async function searchProjectsSemantically(input: { query: string; limit?: number; threshold?: number }): Promise<ProjectSemanticMatch[]> {
@@ -112,19 +150,37 @@ export async function searchProjectsSemantically(input: { query: string; limit?:
 
   try {
     const embedding = await getQueryEmbedding(trimmed);
-    const { data, error } = await supabase.rpc(
-      RPC_NAME,
-      {
-        query_embedding: embedding,
-        match_count: Math.min(Math.max(limit, 1), 20),
-        match_threshold: typeof threshold === 'number' ? threshold : DEFAULT_THRESHOLD,
-      } as never,
+    const desired = Math.min(Math.max(limit, 1), 20);
+    const thresholdsToTry = Array.from(
+      new Set([
+        typeof threshold === 'number' ? threshold : DEFAULT_THRESHOLD,
+        0.5,
+        0.35,
+        0.2,
+        0.0,
+      ]),
     );
 
-    if (error) {
-      encounteredError = error;
-    } else {
-      rows = (data ?? []) as MatchRow[];
+    for (const thr of thresholdsToTry) {
+      const { data, error } = await supabase.rpc(
+        RPC_NAME,
+        {
+          query_embedding: embedding,
+          match_count: desired * 3,
+          match_threshold: thr,
+        } as never,
+      );
+
+      if (error) {
+        encounteredError = error;
+        break;
+      }
+
+      const candidateRows = (data ?? []) as MatchRow[];
+      if (candidateRows.length) {
+        rows = candidateRows;
+        break;
+      }
     }
   } catch (err) {
     encounteredError = err instanceof Error ? err : new Error(String(err));
@@ -167,20 +223,10 @@ export async function searchProjectsSemantically(input: { query: string; limit?:
     });
   }
 
-  return rows
-    .map<ProjectSemanticMatch>((row) => {
-      const pid = Number(row.project_id);
-      const score = typeof row.similarity === 'number' ? row.similarity : typeof row.score === 'number' ? row.score : 0;
-      const projectName = row.project_name ?? projectNameById.get(pid) ?? '名称不明';
-      return {
-        projectId: pid,
-        budgetYear: Number(row.budget_year),
-        score,
-        projectName,
-        surface: row.surface ?? null,
-        synonyms: row.synonyms ?? null,
-        keywords: row.keywords ?? null,
-      };
-    })
-    .sort((a, b) => b.score - a.score);
+  const normalized = rows.map((row) => ({
+    ...row,
+    project_name: row.project_name ?? projectNameById.get(Number(row.project_id)) ?? null,
+  }));
+
+  return normalizeProjects(normalized, Math.min(Math.max(limit, 1), 20));
 }
