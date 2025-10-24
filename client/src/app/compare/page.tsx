@@ -21,6 +21,16 @@ type ProjectMatch = { projectId: number; label: string; score: number; surface?:
 
 const MIN_QUERY_LENGTH = 2;
 
+function extractErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return '不明なエラーが発生しました';
+  }
+}
+
 async function fetchSummary(target: CompareRequest): Promise<Summary> {
   const params = new URLSearchParams({ type: target.type });
   if (target.type === 'agency') params.set('value', target.value);
@@ -164,7 +174,7 @@ const ComparePage: React.FC = () => {
         if (!matches.length) setLeftSearchError('候補が見つかりませんでした');
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') return;
-        setLeftSearchError(err instanceof Error ? err.message : String(err));
+        setLeftSearchError(extractErrorMessage(err));
       } finally {
         setLeftSearchLoading(false);
       }
@@ -213,7 +223,7 @@ const ComparePage: React.FC = () => {
         if (!matches.length) setRightSearchError('候補が見つかりませんでした');
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') return;
-        setRightSearchError(err instanceof Error ? err.message : String(err));
+        setRightSearchError(extractErrorMessage(err));
       } finally {
         setRightSearchLoading(false);
       }
@@ -267,7 +277,8 @@ const ComparePage: React.FC = () => {
         setRightSummary(null);
         setLeftRecipients([]);
         setRightRecipients([]);
-        setError(err instanceof Error ? err.message : String(err));
+        const message = extractErrorMessage(err);
+        setError(message);
         throw err;
       } finally {
         setLoading(false);
