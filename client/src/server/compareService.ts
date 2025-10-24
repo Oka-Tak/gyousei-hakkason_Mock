@@ -23,29 +23,7 @@ export type CompareSummary = {
   firstLevel: Array<{ name: string; value: number }>;
 };
 
-function buildProjectSummary(projectId: number, rows: any[]): CompareSummary {
-  const projectRow = rows[0];
-  const label = (projectRow.project_name as string | null) || `プロジェクトID ${projectId}`;
-  const total = rows.reduce((sum: number, row: any) => sum + Number(row.total_budget || 0), 0);
-  const firstLevelMap = new Map<string, number>();
-  rows.forEach((row: any) => {
-    const key = row.bureau_agency || row.agency_name || 'その他';
-    firstLevelMap.set(key, (firstLevelMap.get(key) || 0) + Number(row.total_budget || 0));
-  });
-  const firstLevel = Array.from(firstLevelMap.entries())
-    .map(([name, value]) => ({ name, value }))
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 8);
-
-  return {
-    target: { type: 'project', projectId: Number(projectId), label },
-    total,
-    projectCount: 1,
-    firstLevel,
-  };
-}
-
-async function fetchSingleProjectSummary(projectId: number): Promise<CompareSummary | null> {
+async function fetchProjectSummary(projectId: number): Promise<CompareSummary | null> {
   const supabase = getSupabase();
   const { data: projectRowsRaw, error: projectErr } = await supabase
     .from('project')
@@ -65,64 +43,75 @@ async function fetchSingleProjectSummary(projectId: number): Promise<CompareSumm
   }>;
   if (!projectRows.length) return null;
 
-  const organizationIds = Array.from(new Set(projectRows.map(r => r.organization_id).filter((id): id is string => !!id)));
-  const { data: orgRowsRaw, error: orgErr } = await supabase
-    .from('organization')
-    .select('organization_id, bureau_office, department, division, unit, section, team, agency_id')
-    .in('organization_id', organizationIds);
-  if (orgErr) throw orgErr;
-  const orgRows = (orgRowsRaw ?? []) as Array<{
-    organization_id: string;
-    bureau_office?: string | null;
-    department?: string | null;
-    division?: string | null;
-    unit?: string | null;
-    section?: string | null;
-    team?: string | null;
-    agency_id?: string | null;
-  }>;
-  const agencyIds = Array.from(new Set(orgRows.map(o => o.agency_id).filter((id): id is string => !!id)));
-  const { data: agencyRowsRaw, error: agencyErr } = await supabase
-    .from('agency')
-    .select('agency_id, agency_name, ministry_name')
-    .in('agency_id', agencyIds);
-  if (agencyErr) throw agencyErr;
-  const agencyRows = (agencyRowsRaw ?? []) as Array<{
-    agency_id: string;
-    agency_name: string | null;
-    ministry_name: string | null;
+  const project = projectRows[0];
+  const budgetYear = project.budget_year ?? 2024;
+
+  const { data: blockRowsRaw, error: blockErr } = await supabase
+    .from('project_spending_block')
+    .select('block_id, block_name, block_total_amount')
+    .eq('project_id', projectId)
+    .eq('budget_year', budgetYear);
+  if (blockErr) throw blockErr;
+  const blockRows = (blockRowsRaw ?? []) as Array<{
+    block_id: number;
+    block_name: string | null;
+    block_total_amount: number | null;
   }>;
 
-  const orgById = new Map<string, typeof orgRows[number]>();
-  orgRows.forEach(o => orgById.set(o.organization_id, o));
-  const agencyById = new Map<string, typeof agencyRows[number]>();
-  agencyRows.forEach(a => agencyById.set(a.agency_id, a));
+  const blockIds = blockRows.map(b => b.block_id).filter((id): id is number => Number.isFinite(id));
+  let spendingRows: Array<{ block_id: number; amount: number | null }> = [];
+  if (blockIds.length) {
+    const { data: spendingRaw, error: spendingErr } = await supabase
+      .from('project_spending')
+      .select('block_id, amount')
+      .in('block_id', blockIds);
+    if (spendingErr) throw spendingErr;
+    spendingRows = (spendingRaw ?? []) as Array<{ block_id: number; amount: number | null }>;
+  }
 
-  const enrichedRows = projectRows.map((row) => {
-    const org = row.organization_id ? orgById.get(row.organization_id) : undefined;
-    const agency = org?.agency_id ? agencyById.get(org.agency_id) : undefined;
-    return {
-      ...row,
-      agency_id: agency?.agency_id,
-      agency_name: agency?.agency_name,
-      ministry_name: agency?.ministry_name || agency?.agency_name,
-      bureau_agency: org?.bureau_office,
-      total_budget:
-        Number(row.initial_budget_total ?? 0) +
-        Number(row.adjustment_total ?? 0) +
-        Number(row.carryover_from_previous_total ?? 0) +
-        Number(row.contingency_total ?? 0),
-    };
+  const amountByBlock = new Map<number, number>();
+  spendingRows.forEach((row) => {
+    const existing = amountByBlock.get(row.block_id) ?? 0;
+    amountByBlock.set(row.block_id, existing + Number(row.amount || 0));
   });
 
-  return buildProjectSummary(projectId, enrichedRows);
+  let total = 0;
+  const firstLevel = blockRows
+    .map((block) => {
+      const fromSpending = amountByBlock.get(block.block_id) ?? 0;
+      const value = fromSpending > 0 ? fromSpending : Number(block.block_total_amount || 0);
+      total += value;
+      return {
+        name: block.block_name || `ブロック ${block.block_id}`,
+        value,
+      };
+    })
+    .filter((item) => item.value > 0)
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 8);
+
+  if (total <= 0) {
+    total =
+      Number(project.initial_budget_total ?? 0) +
+      Number(project.adjustment_total ?? 0) +
+      Number(project.carryover_from_previous_total ?? 0) +
+      Number(project.contingency_total ?? 0);
+  }
+
+  const label = project.project_name || `プロジェクトID ${projectId}`;
+
+  return {
+    target: { type: 'project', projectId: Number(projectId), label },
+    total,
+    projectCount: 1,
+    firstLevel,
+  };
 }
 
 export async function fetchCompareSummary(input: { type: 'agency'; value: string } | { type: 'project'; projectId: number }): Promise<CompareSummary | null> {
-  const rows = await fetchMainData();
-  if (!rows.length) return null;
-
   if (input.type === 'agency') {
+    const rows = await fetchMainData();
+    if (!rows.length) return null;
     const { value } = input;
     const filtered = rows.filter((r: any) => r.agency_name === value || r.ministry_name === value);
     if (!filtered.length) return null;
@@ -152,14 +141,7 @@ export async function fetchCompareSummary(input: { type: 'agency'; value: string
   }
 
   const { projectId } = input;
-  const filtered = rows.filter((r: any) => Number(r.project_id) === Number(projectId));
-
-  if (!filtered.length) {
-    const fallback = await fetchSingleProjectSummary(projectId);
-    return fallback;
-  }
-
-  return buildProjectSummary(projectId, filtered);
+  return fetchProjectSummary(projectId);
 }
 
 export async function fetchCompareRecipients(input: { type: 'agency'; value: string; limit?: number } | { type: 'project'; projectId: number; limit?: number }) {
