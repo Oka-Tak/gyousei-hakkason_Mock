@@ -21,7 +21,7 @@ import argparse
 import csv
 import os
 from pathlib import Path
-from typing import Dict, Iterable, List, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 import numpy as np
 from openai import OpenAI
@@ -42,6 +42,11 @@ from generate_project_embeddings import (
 DEFAULT_OUTPUT = BASE_DIR / "converted_data" / "project_semantic_embedding_openai.csv"
 DEFAULT_MODEL = "text-embedding-3-small"
 DEFAULT_BATCH = 100
+DEFAULT_ENV_PATHS = [
+    BASE_DIR / "client" / ".env.local",
+    BASE_DIR / ".env.local",
+    BASE_DIR / ".env",
+]
 
 
 def parse_args() -> argparse.Namespace:
@@ -66,6 +71,26 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def load_key_from_env_files(env_key: str, paths: Iterable[Path]) -> Optional[str]:
+    for path in paths:
+        if not path.exists():
+            continue
+        try:
+            with path.open("r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    if "=" not in line:
+                        continue
+                    key, value = line.split("=", 1)
+                    if key.strip() == env_key:
+                        return value.strip().strip('"').strip("'")
+        except OSError:
+            continue
+    return None
+
+
 def resolve_api_key(args: argparse.Namespace) -> str:
     if args.api_key_file:
         if not args.api_key_file.exists():
@@ -74,9 +99,12 @@ def resolve_api_key(args: argparse.Namespace) -> str:
             key = f.readline().strip()
             if key:
                 return key
-    env_key = os.getenv(args.api_key_env, "").strip()
-    if env_key:
-        return env_key
+    env_val = os.getenv(args.api_key_env, "").strip()
+    if env_val:
+        return env_val
+    file_val = load_key_from_env_files(args.api_key_env, DEFAULT_ENV_PATHS)
+    if file_val:
+        return file_val
     raise RuntimeError(
         "OpenAI APIキーが見つかりません。環境変数を設定するか --api-key-file で指定してください。"
     )
@@ -175,4 +203,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
