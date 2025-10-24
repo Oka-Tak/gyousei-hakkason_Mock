@@ -142,6 +142,20 @@ const ComparePage: React.FC = () => {
     setRightSearchLoading(false);
   }, []);
 
+  const setLeftInputValue = useCallback((value: string, options?: { preserveSelection?: boolean }) => {
+    setLeftInput(value);
+    if (leftType === 'project' && !options?.preserveSelection) {
+      setLeftProjectSelection(null);
+    }
+  }, [leftType]);
+
+  const setRightInputValue = useCallback((value: string, options?: { preserveSelection?: boolean }) => {
+    setRightInput(value);
+    if (rightType === 'project' && !options?.preserveSelection) {
+      setRightProjectSelection(null);
+    }
+  }, [rightType]);
+
   const performProjectSearch = useCallback(
     async (side: 'left' | 'right') => {
       const isLeft = side === 'left';
@@ -284,8 +298,8 @@ const ComparePage: React.FC = () => {
   const handleClear = useCallback(() => {
     setLeftType('agency');
     setRightType('agency');
-    setLeftInput('');
-    setRightInput('');
+    setLeftInputValue('', { preserveSelection: true });
+    setRightInputValue('', { preserveSelection: true });
     leftSearchAbort.current?.abort();
     rightSearchAbort.current?.abort();
     resetLeftProjectState();
@@ -312,14 +326,14 @@ const ComparePage: React.FC = () => {
 
     if (typeA === 'agency') {
       const valueA = sp.get('valueA') || '';
-      setLeftInput(valueA);
+      setLeftInputValue(valueA, { preserveSelection: true });
       if (valueA) leftPrefill = { type: 'agency', value: valueA };
     } else {
       const projectIdA = Number(sp.get('projectIdA') || '');
       const nameA = sp.get('nameA') || '';
       if (Number.isFinite(projectIdA) && projectIdA > 0) {
         const label = nameA || `プロジェクトID ${projectIdA}`;
-        setLeftInput(label);
+        setLeftInputValue(label, { preserveSelection: true });
         setLeftProjectSelection({ projectId: projectIdA, label, score: 0 });
         leftPrefill = { type: 'project', projectId: projectIdA };
       }
@@ -327,14 +341,14 @@ const ComparePage: React.FC = () => {
 
     if (typeB === 'agency') {
       const valueB = sp.get('valueB') || '';
-      setRightInput(valueB);
+      setRightInputValue(valueB, { preserveSelection: true });
       if (valueB) rightPrefill = { type: 'agency', value: valueB };
     } else {
       const projectIdB = Number(sp.get('projectIdB') || '');
       const nameB = sp.get('nameB') || '';
       if (Number.isFinite(projectIdB) && projectIdB > 0) {
         const label = nameB || `プロジェクトID ${projectIdB}`;
-        setRightInput(label);
+        setRightInputValue(label, { preserveSelection: true });
         setRightProjectSelection({ projectId: projectIdB, label, score: 0 });
         rightPrefill = { type: 'project', projectId: projectIdB };
       }
@@ -357,10 +371,7 @@ const ComparePage: React.FC = () => {
         type: leftType,
         setType: setLeftType,
         input: leftInput,
-        setInput: (val: string) => {
-          setLeftInput(val);
-          if (leftType === 'project') setLeftProjectSelection(null);
-        },
+        setInput: (val: string, options?: { preserveSelection?: boolean }) => setLeftInputValue(val, options),
         projectSelection: leftProjectSelection,
         setProjectSelection: setLeftProjectSelection,
         suggestions: leftSuggestions,
@@ -375,10 +386,7 @@ const ComparePage: React.FC = () => {
         type: rightType,
         setType: setRightType,
         input: rightInput,
-        setInput: (val: string) => {
-          setRightInput(val);
-          if (rightType === 'project') setRightProjectSelection(null);
-        },
+        setInput: (val: string, options?: { preserveSelection?: boolean }) => setRightInputValue(val, options),
         projectSelection: rightProjectSelection,
         setProjectSelection: setRightProjectSelection,
         suggestions: rightSuggestions,
@@ -396,12 +404,14 @@ const ComparePage: React.FC = () => {
     leftSuggestions,
     leftSearchLoading,
     leftSearchError,
+    setLeftInputValue,
     rightType,
     rightInput,
     rightProjectSelection,
     rightSuggestions,
     rightSearchLoading,
     rightSearchError,
+    setRightInputValue,
     performProjectSearch,
   ]);
 
@@ -504,7 +514,7 @@ const ComparePage: React.FC = () => {
                           type="button"
                           onClick={() => {
                             cfg.setProjectSelection(suggestion);
-                            cfg.setInput(suggestion.label);
+                            cfg.setInput(suggestion.label, { preserveSelection: true });
                             cfg.setSuggestions([]);
                             cfg.setError(null);
                           }}
