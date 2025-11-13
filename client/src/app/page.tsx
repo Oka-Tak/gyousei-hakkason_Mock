@@ -20,12 +20,29 @@ const Page: React.FC = () => {
 
   const [visibleAgencies, setVisibleAgencies] = useState<string[]>([]);
   const { nodes, links, colorMap, loading, error, allAgencies, limitedNodes } = useMainGraphData(visibleAgencies);
+  const nodesCount = nodes.length;
+  const linksCount = links.length;
+  const limitedNodesCount = limitedNodes.length;
+  const allAgenciesCount = allAgencies?.length ?? 0;
 
   useEffect(() => {
     if (allAgencies && allAgencies.length && visibleAgencies.length === 0) {
+      console.log('[MainPage] 初期表示対象の省庁をセット', { allAgenciesCount: allAgencies.length });
       setVisibleAgencies(allAgencies);
     }
   }, [allAgencies, visibleAgencies.length]);
+
+  useEffect(() => {
+    console.log('[MainPage] グラフ描画ステータス', {
+      loading,
+      error,
+      nodesCount,
+      linksCount,
+      limitedNodesCount,
+      visibleAgenciesCount: visibleAgencies.length,
+      allAgenciesCount,
+    });
+  }, [loading, error, nodesCount, linksCount, limitedNodesCount, visibleAgencies.length, allAgenciesCount]);
 
   const [showSpotlight, setShowSpotlight] = useState(false);
   const [search, setSearch] = useState('');
@@ -71,7 +88,7 @@ const Page: React.FC = () => {
         focusedNodeId={results.length ? results[currentHit]?.id ?? null : focusedNodeId}
         onNodeClick={(d) => { window.location.href = `/subgraph?node=${encodeURIComponent(d.id)}`; }}
         onBackgroundClick={() => setFocusedNodeId(null)}
-        onZoomReady={(z) => { zoomRef.current = z; }}
+        onZoomReady={(z) => { console.log('[MainPage] ForceGraph zoom 初期化完了'); zoomRef.current = z; }}
         svgStyle={{ position: 'absolute', top: isMobile ? 56 : 0, left: 0, zIndex: 1, width: '100vw', height: isMobile ? 'calc(100vh - 56px)' : '100vh' }}
       />
 
