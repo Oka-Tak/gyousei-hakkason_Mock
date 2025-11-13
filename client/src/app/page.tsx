@@ -106,24 +106,7 @@ const Page: React.FC = () => {
         }}
       >
         {NAV_LINKS.map((link) => (
-          <Link
-            key={link.href}
-            href={link.href}
-            style={{
-              textDecoration: 'none',
-              background: 'rgba(255,255,255,0.95)',
-              border: '1px solid #d0d7de',
-              borderRadius: 999,
-              padding: isMobile ? '6px 12px' : '8px 16px',
-              fontSize: isMobile ? 12 : 13,
-              color: '#0f172a',
-              boxShadow: '0 2px 6px rgba(15, 23, 42, 0.12)',
-              transition: 'background 0.15s ease, transform 0.15s ease',
-              fontWeight: 600,
-            }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#e2e8f0'; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.95)'; }}
-          >
+          <Link key={link.href} href={link.href} className="navLinkButton">
             {link.label}
           </Link>
         ))}
