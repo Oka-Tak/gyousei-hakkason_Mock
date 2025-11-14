@@ -3,11 +3,24 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import Fuse from 'fuse.js';
+import Link from 'next/link';
 import ForceGraph from '@/components/graph/ForceGraph';
 import Controls from '@/components/graph/Controls';
 import { useMainGraphData } from '@/features/graph/hooks/useGraphData';
 import { NODE_SIZE_BY_GROUP } from '@/features/graph/constants';
 import LoadingOverlay from '@/components/common/LoadingOverlay';
+
+const NAV_LINKS = [
+  { href: '/landing', label: 'ダッシュボード' },
+  { href: '/explore', label: '探索' },
+  { href: '/compare', label: '比較' },
+  { href: '/recipients', label: '受取先' },
+  { href: '/agencies', label: '省庁一覧' },
+  { href: '/company', label: '企業検索' },
+  { href: '/policy', label: '政策・法令ナビ' },
+  { href: '/outcomes', label: '目標と実績' },
+  { href: '/insight', label: 'インサイト' },
+];
 
 const Page: React.FC = () => {
   const [isMobile, setIsMobile] = useState(false);
@@ -77,6 +90,27 @@ const Page: React.FC = () => {
         visibleAgencies={visibleAgencies}
         onToggleAgency={(agency, next) => setVisibleAgencies(prev => next ? Array.from(new Set([...prev, agency])) : prev.filter(a => a !== agency))}
       />
+
+      <nav
+        aria-label="ZAIMYAKU ページナビゲーション"
+        style={{
+          position: 'absolute',
+          top: isMobile ? 64 : 78,
+          right: isMobile ? 10 : 28,
+          zIndex: 15,
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 8,
+          maxWidth: isMobile ? '90vw' : 420,
+          justifyContent: isMobile ? 'flex-start' : 'flex-end',
+        }}
+      >
+        {NAV_LINKS.map((link) => (
+          <Link key={link.href} href={link.href} className="navLinkButton">
+            {link.label}
+          </Link>
+        ))}
+      </nav>
 
       <ForceGraph
         nodes={nodes}

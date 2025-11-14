@@ -215,7 +215,13 @@ const ForceGraph: React.FC<ForceGraphProps> = (props) => {
     }
   }, [focusedNodeId, nodes, nodeSizeByGroup, widthProp, heightProp, isMobile, highlightNodeIds, highlightEdges, metrics.edgeWidthScale]);
 
-  return <svg ref={svgRef} style={svgStyle} />;
+  const mergedStyle = useMemo(() => ({
+    width: '100vw',
+    height: isMobile ? 'calc(100vh - 56px)' : '100vh',
+    ...svgStyle,
+  }), [svgStyle, isMobile]);
+
+  return <svg ref={svgRef} style={mergedStyle} />;
 };
 
 export default ForceGraph;
