@@ -4,12 +4,7 @@ let supabaseSingleton: ReturnType<typeof createClient> | null = null;
 
 export function getSupabase() {
   if (supabaseSingleton) return supabaseSingleton;
-  
-  // デバッグ用ログ
-  console.log('Environment variables check:');
-  console.log('SUPABASE_URL:', process.env.SUPABASE_URL);
-  console.log('SUPABASE_ANON_KEY exists:', !!process.env.SUPABASE_ANON_KEY);
-  
+
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
   
