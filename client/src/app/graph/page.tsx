@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import Fuse from 'fuse.js';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 
 import LoadingOverlay from '@/components/common/LoadingOverlay';
 import Controls from '@/components/graph/Controls';
@@ -13,18 +14,19 @@ import { useMainGraphData } from '@/features/graph/hooks/useGraphData';
 
 const NAV_LINKS = [
   { href: '/', label: 'ホーム' },
-  { href: '/landing', label: 'ダッシュボード' },
   { href: '/explore', label: '探索' },
   { href: '/compare', label: '比較' },
-  { href: '/recipients', label: '受取先' },
   { href: '/agencies', label: '省庁一覧' },
-  { href: '/company', label: '企業検索' },
+  { href: '/company', label: '企業・受取先' },
   { href: '/policy', label: '政策・法令ナビ' },
   { href: '/outcomes', label: '目標と実績' },
   { href: '/insight', label: 'インサイト' },
 ];
 
 const GraphPage: React.FC = () => {
+  const searchParams = useSearchParams();
+  const initialSearch = searchParams.get('search') || '';
+
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth <= 600);
@@ -46,20 +48,8 @@ const GraphPage: React.FC = () => {
     }
   }, [allAgencies, visibleAgencies.length]);
 
-  useEffect(() => {
-    console.log('[GraphPage] グラフ描画ステータス', {
-      loading,
-      error,
-      nodesCount,
-      linksCount,
-      limitedNodesCount,
-      visibleAgenciesCount: visibleAgencies.length,
-      allAgenciesCount,
-    });
-  }, [loading, error, nodesCount, linksCount, limitedNodesCount, visibleAgencies.length, allAgenciesCount]);
-
   const [showSpotlight, setShowSpotlight] = useState(false);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(initialSearch);
   const [currentHit, setCurrentHit] = useState(0);
   const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null);
 
@@ -70,7 +60,23 @@ const GraphPage: React.FC = () => {
   const zoomRef = useRef<d3.ZoomBehavior<Element, unknown> | null>(null);
 
   if (loading) return (<LoadingOverlay title="ZAIMYAKU" message="データを読み込んでいます..." variant="pulse" dotsCount={3} />);
-  if (error) return (<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', color: 'crimson' }}>エラー: {error}</div>);
+  if (error) return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: 16, padding: 20 }}>
+      <div style={{ color: '#dc2626', fontSize: 18, fontWeight: 600 }}>データの読み込みに失敗しました</div>
+      <div style={{ color: '#64748b', fontSize: 14, textAlign: 'center' }}>{error}</div>
+      <div style={{ display: 'flex', gap: 12 }}>
+        <button
+          onClick={() => window.location.reload()}
+          style={{ background: '#07796b', color: '#fff', padding: '10px 20px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600 }}
+        >
+          再読み込み
+        </button>
+        <Link href="/" style={{ background: '#f1f5f9', color: '#334155', padding: '10px 20px', borderRadius: 8, textDecoration: 'none', fontWeight: 600 }}>
+          ホームに戻る
+        </Link>
+      </div>
+    </div>
+  );
 
   return (
     <div style={{ width: '100vw', height: isMobile ? '100dvh' : '100vh', margin: 0, padding: 0, overflow: 'hidden', position: 'relative' }}>
