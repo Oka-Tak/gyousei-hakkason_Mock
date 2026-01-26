@@ -7,6 +7,9 @@ import { formatJaYen } from '@/utils/format';
 
 export type NodeSizeMap = Record<string, number>;
 
+type D3SVGSelection = d3.Selection<SVGSVGElement, unknown, null, undefined>;
+type SimulatedLink = d3.SimulationLinkDatum<GraphNodeDatum> & { value: number };
+
 export interface ForceGraphProps {
   nodes: GraphNodeDatum[];
   links: GraphLinkDatum[];
@@ -20,7 +23,7 @@ export interface ForceGraphProps {
   focusedNodeId?: string | null;
   highlightNodeIds?: string[];
   highlightEdges?: Array<{ sourceId: string; targetId: string }>;
-  onNodeClick?: (node: GraphNodeDatum, event: any) => void;
+  onNodeClick?: (node: GraphNodeDatum, event: MouseEvent) => void;
   onBackgroundClick?: () => void;
   onZoomReady?: (zoom: d3.ZoomBehavior<Element, unknown>) => void;
   svgStyle?: React.CSSProperties;
@@ -60,11 +63,11 @@ const ForceGraph: React.FC<ForceGraphProps> = (props) => {
     const zoomed = (event: d3.D3ZoomEvent<Element, unknown>) => {
       zoomLayer.attr('transform', event.transform.toString());
     };
-    const zoom = d3.zoom<Element, unknown>().scaleExtent([0.1, 4]).on('zoom', zoomed);
-    zoomRef.current = zoom;
-    (svg as any).call(zoom);
-    (svg as any).call(zoom.transform, d3.zoomIdentity.translate(0, 0).scale(1));
-    onZoomReady && onZoomReady(zoom);
+    const zoom = d3.zoom<SVGSVGElement, unknown>().scaleExtent([0.1, 4]).on('zoom', zoomed);
+    zoomRef.current = zoom as d3.ZoomBehavior<Element, unknown>;
+    svg.call(zoom);
+    svg.call(zoom.transform, d3.zoomIdentity.translate(0, 0).scale(1));
+    if (onZoomReady) onZoomReady(zoom as d3.ZoomBehavior<Element, unknown>);
 
     const link = linkGroup.selectAll('line').data(links).join('line')
       .attr('stroke-width', d => metrics.edgeWidthScale(d.value))
@@ -168,20 +171,32 @@ const ForceGraph: React.FC<ForceGraphProps> = (props) => {
     if (!svgRef.current) return;
     const svg = d3.select(svgRef.current);
     const hasHighlight = (highlightNodeIds && highlightNodeIds.length > 0) || (highlightEdges && highlightEdges.length > 0);
+
+    // Helper functions with proper typing
+    const getNodeOpacity = (d: GraphNodeDatum, nodeSet: Set<string>, defaultOpacity: number, highlightOpacity: number, dimOpacity: number) =>
+      nodeSet.size === 0 ? defaultOpacity : (nodeSet.has(d.id) ? highlightOpacity : dimOpacity);
+
+    const getLinkKey = (l: SimulatedLink) => {
+      const source = l.source as GraphNodeDatum;
+      const target = l.target as GraphNodeDatum;
+      return `${source.id}→${target.id}`;
+    };
+
     if (hasHighlight) {
       const nodeSet = new Set(highlightNodeIds);
       const edgeSet = new Set<string>();
       highlightEdges.forEach(e => { edgeSet.add(`${e.sourceId}→${e.targetId}`); edgeSet.add(`${e.targetId}→${e.sourceId}`); });
-      svg.selectAll('.node-group').select('circle')
-        .attr('opacity', (d: any) => nodeSet.size === 0 ? 1 : (nodeSet.has(d.id) ? 1 : 0.12))
-        .attr('stroke', (d: any) => nodeSet.has(d.id) ? '#e17055' : '#fff')
-        .attr('stroke-width', (d: any) => nodeSet.has(d.id) ? 4 : 1.5);
-      svg.selectAll('.node-group').select('.node-label')
-        .attr('opacity', (d: any) => nodeSet.size === 0 ? 1 : (nodeSet.has(d.id) ? 1 : 0.12));
-      svg.selectAll('.links line')
-        .attr('opacity', (l: any) => edgeSet.size === 0 ? 0.6 : (edgeSet.has(`${l.source.id}→${l.target.id}`) ? 1 : 0.08))
-        .attr('stroke', (l: any) => edgeSet.has(`${l.source.id}→${l.target.id}`) ? '#e17055' : '#999')
-        .attr('stroke-width', (l: any) => edgeSet.has(`${l.source.id}→${l.target.id}`) ? Math.max(3, metrics.edgeWidthScale(l.value)) : metrics.edgeWidthScale(l.value));
+
+      svg.selectAll<SVGGElement, GraphNodeDatum>('.node-group').select('circle')
+        .attr('opacity', d => getNodeOpacity(d, nodeSet, 1, 1, 0.12))
+        .attr('stroke', d => nodeSet.has(d.id) ? '#e17055' : '#fff')
+        .attr('stroke-width', d => nodeSet.has(d.id) ? 4 : 1.5);
+      svg.selectAll<SVGGElement, GraphNodeDatum>('.node-group').select('.node-label')
+        .attr('opacity', d => getNodeOpacity(d, nodeSet, 1, 1, 0.12));
+      svg.selectAll<SVGLineElement, SimulatedLink>('.links line')
+        .attr('opacity', l => edgeSet.size === 0 ? 0.6 : (edgeSet.has(getLinkKey(l)) ? 1 : 0.08))
+        .attr('stroke', l => edgeSet.has(getLinkKey(l)) ? '#e17055' : '#999')
+        .attr('stroke-width', l => edgeSet.has(getLinkKey(l)) ? Math.max(3, metrics.edgeWidthScale(l.value)) : metrics.edgeWidthScale(l.value));
     } else if (focusedNodeId) {
       const target = nodes.find(n => n.id === focusedNodeId);
       if (!target) return;
@@ -193,25 +208,30 @@ const ForceGraph: React.FC<ForceGraphProps> = (props) => {
         const containerH = heightProp ?? (isMobile ? window.innerHeight - 56 : window.innerHeight);
         const tx = containerW / 2 - x * scale;
         const ty = containerH / 2 - y * scale;
-        svg.transition().duration(400).call((zoomRef.current as any).transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
+        const zoomBehavior = zoomRef.current as d3.ZoomBehavior<SVGSVGElement, unknown>;
+        svg.transition().duration(400).call(zoomBehavior.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
       }
-      svg.selectAll('.node-group').select('circle')
-        .attr('stroke', (d: any) => d.id === target.id ? '#e17055' : '#fff')
-        .attr('stroke-width', (d: any) => d.id === target.id ? 6 : 1.5)
-        .attr('r', (d: any) => d.id === target.id ? 1.5 * (nodeSizeByGroup[d.group as string] || 8) : (nodeSizeByGroup[d.group as string] || 8))
-        .attr('opacity', (d: any) => d.id === target.id ? 1 : 0.15);
-      svg.selectAll('.node-group').select('.node-label')
-        .attr('opacity', (d: any) => d.id === target.id ? 1 : 0.15);
-      svg.selectAll('.links line')
-        .attr('opacity', (l: any) => (l.source.id === focusedNodeId || l.target.id === focusedNodeId) ? 1 : 0.07);
+      svg.selectAll<SVGGElement, GraphNodeDatum>('.node-group').select('circle')
+        .attr('stroke', d => d.id === target.id ? '#e17055' : '#fff')
+        .attr('stroke-width', d => d.id === target.id ? 6 : 1.5)
+        .attr('r', d => d.id === target.id ? 1.5 * (nodeSizeByGroup[d.group] || 8) : (nodeSizeByGroup[d.group] || 8))
+        .attr('opacity', d => d.id === target.id ? 1 : 0.15);
+      svg.selectAll<SVGGElement, GraphNodeDatum>('.node-group').select('.node-label')
+        .attr('opacity', d => d.id === target.id ? 1 : 0.15);
+      svg.selectAll<SVGLineElement, SimulatedLink>('.links line')
+        .attr('opacity', l => {
+          const source = l.source as GraphNodeDatum;
+          const target = l.target as GraphNodeDatum;
+          return (source.id === focusedNodeId || target.id === focusedNodeId) ? 1 : 0.07;
+        });
     } else {
-      svg.selectAll('.node-group').select('circle')
+      svg.selectAll<SVGGElement, GraphNodeDatum>('.node-group').select('circle')
         .attr('stroke', '#fff')
         .attr('stroke-width', 1.5)
-        .attr('r', (d: any) => nodeSizeByGroup[d.group as string] || 8)
+        .attr('r', d => nodeSizeByGroup[d.group] || 8)
         .attr('opacity', 1);
-      svg.selectAll('.node-group').select('.node-label').attr('opacity', 1);
-      svg.selectAll('.links line').attr('opacity', 0.6);
+      svg.selectAll<SVGGElement, GraphNodeDatum>('.node-group').select('.node-label').attr('opacity', 1);
+      svg.selectAll<SVGLineElement, SimulatedLink>('.links line').attr('opacity', 0.6);
     }
   }, [focusedNodeId, nodes, nodeSizeByGroup, widthProp, heightProp, isMobile, highlightNodeIds, highlightEdges, metrics.edgeWidthScale]);
 
