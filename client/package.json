@@ -11,11 +11,12 @@
     "@supabase/supabase-js": "^2.56.0",
     "d3": "^7.9.0",
     "fuse.js": "^7.1.0",
-    "openai": "^4.76.1",
     "next": "15.5.7",
+    "openai": "^4.76.1",
     "pg": "^8.16.3",
     "react": "19.1.0",
-    "react-dom": "19.1.0"
+    "react-dom": "19.1.0",
+    "zod": "^3.24.0"
   },
   "devDependencies": {
     "@types/d3": "^7.4.3",
