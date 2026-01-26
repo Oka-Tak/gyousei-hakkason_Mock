@@ -4,12 +4,29 @@ import React, { useEffect, useMemo, useState } from 'react';
 
 type PolicyItem = { project_id: string; project_name: string; policy_no: string; ministry: string; policy: string; program: string; url: string; law_name: string };
 
+const DEFAULT_VISIBLE = 8;
+
 const PolicyPage: React.FC = () => {
   const [q, setQ] = useState('');
   const [items, setItems] = useState<PolicyItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => { (async () => { try { setLoading(true); const res = await fetch(`/api/policies?q=${encodeURIComponent(q)}`); const json = await res.json(); setItems(json.items || []); } catch(e:any) { setError(e.message);} finally { setLoading(false);} })(); }, [q]);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setLoading(true);
+        const res = await fetch(`/api/policies?q=${encodeURIComponent(q)}`);
+        const json = await res.json();
+        setItems(json.items || []);
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [q]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, PolicyItem[]>();
@@ -20,6 +37,18 @@ const PolicyPage: React.FC = () => {
     }
     return Array.from(map.entries());
   }, [items]);
+
+  const toggleExpand = (key: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
 
   return (
     <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -32,20 +61,46 @@ const PolicyPage: React.FC = () => {
       {loading && <div>読み込み中...</div>}
       {error && <div style={{ color: 'crimson' }}>エラー: {error}</div>}
 
-      {grouped.map(([key, list]) => (
-        <section key={key} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 12 }}>
-          <div style={{ fontWeight: 800, marginBottom: 8 }}>{key}</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            {list.slice(0, 8).map((it, idx) => (
-              <div key={idx} style={{ border: '1px solid #eef2f7', borderRadius: 10, padding: '6px 8px', background: '#f8fafc' }}>
-                <div style={{ fontSize: 12, color: '#64748b' }}>{it.ministry || ''}</div>
-                <a href={`/project/${encodeURIComponent(it.project_id)}`} style={{ fontWeight: 700 }}>{it.project_name || it.project_id}</a>
-                {it.url && <div><a href={it.url} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>政策URL</a></div>}
-              </div>
-            ))}
-          </div>
-        </section>
-      ))}
+      {grouped.map(([key, list]) => {
+        const isExpanded = expandedGroups.has(key);
+        const displayList = isExpanded ? list : list.slice(0, DEFAULT_VISIBLE);
+        const hasMore = list.length > DEFAULT_VISIBLE;
+
+        return (
+          <section key={key} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 12 }}>
+            <div style={{ fontWeight: 800, marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>{key}</span>
+              <span style={{ fontSize: 12, color: '#64748b' }}>{list.length}件</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              {displayList.map((it, idx) => (
+                <div key={idx} style={{ border: '1px solid #eef2f7', borderRadius: 10, padding: '6px 8px', background: '#f8fafc' }}>
+                  <div style={{ fontSize: 12, color: '#64748b' }}>{it.ministry || ''}</div>
+                  <a href={`/project/${encodeURIComponent(it.project_id)}`} style={{ fontWeight: 700 }}>{it.project_name || it.project_id}</a>
+                  {it.url && <div><a href={it.url} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>政策URL</a></div>}
+                </div>
+              ))}
+            </div>
+            {hasMore && (
+              <button
+                onClick={() => toggleExpand(key)}
+                style={{
+                  marginTop: 8,
+                  border: '1px solid #cbd5e1',
+                  background: '#f8fafc',
+                  color: '#334155',
+                  padding: '6px 12px',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  fontSize: 13,
+                }}
+              >
+                {isExpanded ? '折りたたむ' : `残り ${list.length - DEFAULT_VISIBLE} 件を表示`}
+              </button>
+            )}
+          </section>
+        );
+      })}
     </div>
   );
 };

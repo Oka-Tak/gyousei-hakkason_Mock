@@ -2,8 +2,9 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { useMainGraphData } from '@/features/graph/hooks/useGraphData';
-import { formatJaYen, formatPercent } from '@/utils/format';
+import { formatPercent } from '@/utils/format';
 import Money from '@/components/common/Money';
+import { useToast } from '@/components/common/Toast';
 
 type Summary = {
   total: number;
@@ -11,25 +12,42 @@ type Summary = {
   firstLevel: { name: string; value: number }[];
 };
 
-const InsightPage: React.FC = () => {
-  const [isMobile, setIsMobile] = useState(false);
-  useEffect(() => { const f = () => setIsMobile(window.innerWidth <= 600); f(); window.addEventListener('resize', f); return () => window.removeEventListener('resize', f); }, []);
+type RecipientItem = {
+  recipient_name: string;
+  corporate_number: string | null;
+  total_amount: number;
+  projects_count: number;
+};
 
-  // Load all agencies for suggestions; data itself is fetched but not rendered as graph here
+const DEFAULT_RECIPIENTS_LIMIT = 10;
+const EXPANDED_RECIPIENTS_LIMIT = 50;
+
+const InsightPage: React.FC = () => {
+  const { showToast } = useToast();
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const f = () => setIsMobile(window.innerWidth <= 600);
+    f();
+    window.addEventListener('resize', f);
+    return () => window.removeEventListener('resize', f);
+  }, []);
+
   const { allAgencies } = useMainGraphData([]);
   const [agency, setAgency] = useState('');
   const [summary, setSummary] = useState<Summary | null>(null);
-  const [recipients, setRecipients] = useState<Array<{ recipient_name: string; corporate_number: string | null; total_amount: number; projects_count: number }>>([]);
+  const [recipients, setRecipients] = useState<RecipientItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [recipientsExpanded, setRecipientsExpanded] = useState(false);
   const agencies = useMemo(() => allAgencies || [], [allAgencies]);
 
-  const loadData = async (ag: string) => {
+  const loadData = async (ag: string, limit = DEFAULT_RECIPIENTS_LIMIT) => {
     try {
-      setLoading(true); setError(null);
+      setLoading(true);
+      setError(null);
       const [sRes, rRes] = await Promise.all([
         fetch(`/api/insights/summary?agency=${encodeURIComponent(ag)}`),
-        fetch(`/api/insights/recipients?agency=${encodeURIComponent(ag)}&limit=10`),
+        fetch(`/api/insights/recipients?agency=${encodeURIComponent(ag)}&limit=${limit}`),
       ]);
       if (!sRes.ok) throw new Error(`summary: ${sRes.status}`);
       if (!rRes.ok) throw new Error(`recipients: ${rRes.status}`);
@@ -44,7 +62,17 @@ const InsightPage: React.FC = () => {
     }
   };
 
-  const onPickAgency = (ag: string) => { setAgency(ag); if (ag) loadData(ag); };
+  const handleExpandRecipients = async () => {
+    if (!agency) return;
+    setRecipientsExpanded(true);
+    await loadData(agency, EXPANDED_RECIPIENTS_LIMIT);
+  };
+
+  const onPickAgency = (ag: string) => {
+    setAgency(ag);
+    setRecipientsExpanded(false);
+    if (ag) loadData(ag);
+  };
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -138,7 +166,10 @@ const InsightPage: React.FC = () => {
           </div>
 
           <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 14 }}>
-            <div style={{ fontWeight: 700, marginBottom: 8 }}>だれが（上位の受取先）</div>
+            <div style={{ fontWeight: 700, marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>だれが（上位の受取先）</span>
+              <span style={{ fontSize: 12, color: '#64748b' }}>{recipients.length}件表示中</span>
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 8 }}>
               {recipients.map((r) => (
                 <div key={`${r.recipient_name}::${r.corporate_number ?? ''}`} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, alignItems: 'center', border: '1px solid #eef2f7', borderRadius: 10, padding: '8px 10px', background: '#f8fafc' }}>
@@ -151,8 +182,26 @@ const InsightPage: React.FC = () => {
                 </div>
               ))}
             </div>
-            <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
-              <button onClick={() => agency && navigator.clipboard.writeText(`${location.origin}/insight?agency=${encodeURIComponent(agency)}`)} style={{ border: '1px solid #ddd', background: '#f8fafc', padding: '8px 12px', borderRadius: 8, cursor: 'pointer' }}>この見方を共有</button>
+            <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {!recipientsExpanded && recipients.length >= DEFAULT_RECIPIENTS_LIMIT && (
+                <button
+                  onClick={handleExpandRecipients}
+                  style={{ border: '1px solid #cbd5e1', background: '#f8fafc', color: '#334155', padding: '8px 12px', borderRadius: 8, cursor: 'pointer' }}
+                >
+                  もっと見る（最大{EXPANDED_RECIPIENTS_LIMIT}件）
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  if (agency) {
+                    navigator.clipboard.writeText(`${location.origin}/insight?agency=${encodeURIComponent(agency)}`);
+                    showToast('リンクをコピーしました', 'success');
+                  }
+                }}
+                style={{ border: '1px solid #ddd', background: '#f8fafc', padding: '8px 12px', borderRadius: 8, cursor: 'pointer' }}
+              >
+                この見方を共有
+              </button>
               <button onClick={() => agency && (location.href = `/subgraph?node=${encodeURIComponent(agency)}`)} style={{ border: '1px solid #07796b', background: '#07796b', color: '#fff', padding: '8px 12px', borderRadius: 8, cursor: 'pointer' }}>グラフで見る</button>
             </div>
           </div>
