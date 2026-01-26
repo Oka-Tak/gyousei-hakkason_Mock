@@ -1,6 +1,6 @@
 // データベースから取得される生データの型定義
 export interface RawProjectData {
-  project_id?: string;
+  project_id?: string | number;
   budget_year?: number;
   project_year?: number;
   organization_id?: string;
@@ -31,8 +31,7 @@ export interface RawProjectData {
   review_sheet_url?: string;
   spending_list?: SpendingItem[];
   initial_budget?: number;
-  // インデックスシグネチャを追加
-  [key: string]: any;
+  total_budget?: number;
 }
 
 // ノードの型定義（グラフ表示用）
@@ -68,12 +67,12 @@ export interface SpendingItem {
 }
 
 // D3のイベント型定義
-export interface D3DragEvent {
+export interface D3DragEvent<T = GraphNode> {
   x: number;
   y: number;
   dx: number;
   dy: number;
-  subject: Node;
+  subject: T;
 }
 
 // APIレスポンスの型定義
@@ -91,9 +90,6 @@ export interface ZoomTransform {
 
 // 検索結果の型定義
 export interface SearchResult {
-  item: Node;
+  item: GraphNode;
   refIndex: number;
 }
-
-// Kuromoji トークナイザーの型定義
-// kuromoji は廃止

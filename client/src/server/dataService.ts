@@ -1,6 +1,8 @@
 import { getSupabase } from './supabaseClient';
 
 type ProjectRow = {
+  project_id: number;
+  project_name: string | null;
   budget_year: number | null;
   project_year: number | null;
   organization_id: string | null;
@@ -8,7 +10,6 @@ type ProjectRow = {
   adjustment_total: number | null;
   carryover_from_previous_total: number | null;
   contingency_total: number | null;
-  [key: string]: any;
 };
 
 type OrganizationRow = {
@@ -20,7 +21,6 @@ type OrganizationRow = {
   unit?: string | null;
   section?: string | null;
   team?: string | null;
-  [key: string]: any;
 };
 
 type AgencyRow = {
@@ -28,16 +28,38 @@ type AgencyRow = {
   agency_name?: string | null;
   agency_order?: number | null;
   ministry_name?: string | null;
-  [key: string]: any;
+};
+
+export type MainDataRow = {
+  project_id: number;
+  project_name: string | null;
+  budget_year: number | null;
+  project_year: number | null;
+  organization_id: string | null;
+  initial_budget_total: number | null;
+  adjustment_total: number | null;
+  carryover_from_previous_total: number | null;
+  contingency_total: number | null;
+  agency_id?: string;
+  agency_name?: string | null;
+  agency_order?: number | null;
+  ministry_name?: string | null;
+  bureau_agency?: string | null;
+  department?: string | null;
+  division?: string | null;
+  office?: string | null;
+  section?: string | null;
+  team?: string | null;
+  total_budget: number;
 };
 
 // Simple in-memory cache with TTL to avoid repeated heavy work
-let mainDataCache: any[] | null = null;
+let mainDataCache: MainDataRow[] | null = null;
 let mainDataCachedAt = 0;
 const MAIN_TTL_MS = Number(process.env.MAIN_DATA_TTL_MS || 5 * 60 * 1000); // default 5 minutes
 const MAIN_LIMIT = Number(process.env.MAIN_DATA_LIMIT || (process.env.NODE_ENV === 'development' ? 800 : 2000));
 
-export async function fetchMainData() {
+export async function fetchMainData(): Promise<MainDataRow[]> {
   // Serve from cache if fresh
   const now = Date.now();
   if (mainDataCache && now - mainDataCachedAt < MAIN_TTL_MS) {

@@ -3,26 +3,22 @@ import { getSupabase } from './supabaseClient';
 type AgencyRow = {
   agency_id: string;
   agency_name: string | null;
-  [key: string]: any;
 };
 
 type OrganizationRow = {
   organization_id: string;
   agency_id: string | null;
-  [key: string]: any;
 };
 
 type ProjectRow = {
   project_id: number;
   organization_id: string | null;
   budget_year: number | null;
-  [key: string]: any;
 };
 
 type SpendingBlockRow = {
   block_id: number;
   project_id: number;
-  [key: string]: any;
 };
 
 type SpendingRow = {
@@ -31,7 +27,6 @@ type SpendingRow = {
   corporate_number: string | null;
   amount: number | null;
   contract_method?: string | null;
-  [key: string]: any;
 };
 
 type RecipientAgg = {

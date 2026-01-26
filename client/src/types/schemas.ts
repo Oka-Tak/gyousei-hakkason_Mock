@@ -49,4 +49,5 @@ export const RawProjectDataSchema = z.object({
   review_sheet_url: Str,
   spending_list: z.array(SpendingItemSchema).optional(),
   initial_budget: z.number().optional(),
-}).passthrough(); // インデックスシグネチャに対応するため、不明なプロパティを許可
+  total_budget: z.number().optional(),
+});
