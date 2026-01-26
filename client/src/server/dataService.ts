@@ -1,4 +1,5 @@
 import { getSupabase } from './supabaseClient';
+import { CACHE_TTL, BUDGET_YEAR } from './constants';
 
 type ProjectRow = {
   project_id: number;
@@ -56,13 +57,12 @@ export type MainDataRow = {
 // Simple in-memory cache with TTL to avoid repeated heavy work
 let mainDataCache: MainDataRow[] | null = null;
 let mainDataCachedAt = 0;
-const MAIN_TTL_MS = Number(process.env.MAIN_DATA_TTL_MS || 5 * 60 * 1000); // default 5 minutes
 const MAIN_LIMIT = Number(process.env.MAIN_DATA_LIMIT || (process.env.NODE_ENV === 'development' ? 800 : 2000));
 
 export async function fetchMainData(): Promise<MainDataRow[]> {
   // Serve from cache if fresh
   const now = Date.now();
-  if (mainDataCache && now - mainDataCachedAt < MAIN_TTL_MS) {
+  if (mainDataCache && now - mainDataCachedAt < CACHE_TTL.MAIN_DATA) {
     return mainDataCache;
   }
 
@@ -70,7 +70,7 @@ export async function fetchMainData(): Promise<MainDataRow[]> {
   const { data: projects, error: projectError } = await supabase
     .from('project')
     .select('project_id, project_name, budget_year, project_year, organization_id, initial_budget_total, adjustment_total, carryover_from_previous_total, contingency_total')
-    .eq('budget_year', 2024)
+    .eq('budget_year', BUDGET_YEAR.CURRENT)
     .limit(MAIN_LIMIT);
   if (projectError) throw projectError;
 

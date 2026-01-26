@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { getSupabase } from './supabaseClient';
+import { QUERY_LIMITS, SEMANTIC_SEARCH } from './constants';
 
 export class OpenAIConfigError extends Error {
   constructor(message: string) {
@@ -41,7 +42,6 @@ export type ProjectSemanticMatch = {
 
 const OPENAI_MODEL = process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small';
 const RPC_NAME = process.env.SUPABASE_PROJECT_MATCH_RPC || 'match_project_semantic';
-const DEFAULT_THRESHOLD = Number(process.env.PROJECT_MATCH_THRESHOLD ?? 0.55);
 
 let openaiClient: OpenAI | null = null;
 
@@ -152,7 +152,7 @@ async function fallbackProjectSearch(query: string, limit: number): Promise<Proj
     .map((row) => ({
       projectId: Number(row.project_id),
       budgetYear: Number(row.budget_year ?? 0) || 0,
-      score: 0.15,
+      score: SEMANTIC_SEARCH.FALLBACK_SCORE,
       projectName: row.project_name ?? '名称不明',
     }))
     .filter((match, index, self) => self.findIndex((m) => m.projectName === match.projectName) === index)
@@ -160,7 +160,7 @@ async function fallbackProjectSearch(query: string, limit: number): Promise<Proj
 }
 
 export async function searchProjectsSemantically(input: { query: string; limit?: number; threshold?: number }): Promise<ProjectSemanticMatch[]> {
-  const { query, limit = 8, threshold } = input;
+  const { query, limit = QUERY_LIMITS.SEMANTIC_SEARCH_DEFAULT, threshold } = input;
   const trimmed = query.trim();
   if (!trimmed) return [];
 
@@ -174,17 +174,11 @@ export async function searchProjectsSemantically(input: { query: string; limit?:
 
   try {
     const embedding = await getQueryEmbedding(trimmed);
-    const desired = Math.min(Math.max(limit, 1), 20);
+    const desired = Math.min(Math.max(limit, 1), QUERY_LIMITS.SEMANTIC_SEARCH_MAX);
     const thresholdsToTry = Array.from(
       new Set([
-        typeof threshold === 'number' ? threshold : DEFAULT_THRESHOLD,
-        0.8,
-        0.7,
-        0.6,
-        0.5,
-        0.35,
-        0.2,
-        0.0,
+        typeof threshold === 'number' ? threshold : SEMANTIC_SEARCH.DEFAULT_THRESHOLD,
+        ...SEMANTIC_SEARCH.THRESHOLDS_TO_TRY,
       ]),
     );
 
@@ -196,7 +190,7 @@ export async function searchProjectsSemantically(input: { query: string; limit?:
         RPC_NAME,
         {
           query_embedding: embedding,
-          match_count: desired * 5,
+          match_count: desired * QUERY_LIMITS.SEMANTIC_SEARCH_MULTIPLIER,
           match_threshold: thr,
         } as never,
       );
@@ -225,12 +219,12 @@ export async function searchProjectsSemantically(input: { query: string; limit?:
 
   if (encounteredError) {
     console.warn('[semanticSearch] RPC fallback triggered', { query: trimmed, error: encounteredError.message });
-    return fallbackProjectSearch(trimmed, Math.min(Math.max(limit, 1), 20));
+    return fallbackProjectSearch(trimmed, Math.min(Math.max(limit, 1), QUERY_LIMITS.SEMANTIC_SEARCH_MAX));
   }
 
   if (!rows.length) {
     // fallback to simple contains search when embeddings yield nothing
-    const fallbackResults = await fallbackProjectSearch(trimmed, Math.min(Math.max(limit, 1), 20));
+    const fallbackResults = await fallbackProjectSearch(trimmed, Math.min(Math.max(limit, 1), QUERY_LIMITS.SEMANTIC_SEARCH_MAX));
     if (fallbackResults.length) return fallbackResults;
     return [] as ProjectSemanticMatch[];
   }
@@ -265,7 +259,7 @@ export async function searchProjectsSemantically(input: { query: string; limit?:
     project_name: row.project_name ?? projectNameById.get(Number(row.project_id)) ?? null,
   }));
 
-  const result = normalizeProjects(normalized, Math.min(Math.max(limit, 1), 20));
+  const result = normalizeProjects(normalized, Math.min(Math.max(limit, 1), QUERY_LIMITS.SEMANTIC_SEARCH_MAX));
   console.log('[semanticSearch] success', {
     query: trimmed,
     durationMs: Date.now() - startedAt,

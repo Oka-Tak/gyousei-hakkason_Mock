@@ -1,4 +1,5 @@
 import { getSupabase } from './supabaseClient';
+import { CACHE_TTL, QUERY_LIMITS, PAGINATION, BUDGET_YEAR } from './constants';
 
 type AgencyRow = {
   agency_id: string;
@@ -36,14 +37,13 @@ type RecipientAgg = {
   projects_count: number;
 };
 
-const RECIPIENT_TTL_MS = Number(process.env.RECIPIENT_TTL_MS || 10 * 60 * 1000);
 const recipientCache = new Map<string, { at: number; data: RecipientAgg[] }>();
 
-export async function fetchTopRecipientsByAgency(agencyName: string, limit = 10): Promise<RecipientAgg[]> {
+export async function fetchTopRecipientsByAgency(agencyName: string, limit = PAGINATION.DEFAULT_LIMIT): Promise<RecipientAgg[]> {
   const key = `${agencyName}::${limit}`;
   const now = Date.now();
   const cached = recipientCache.get(key);
-  if (cached && now - cached.at < RECIPIENT_TTL_MS) return cached.data;
+  if (cached && now - cached.at < CACHE_TTL.RECIPIENT) return cached.data;
 
   const supabase = getSupabase();
   // Resolve agency -> organizations
@@ -69,7 +69,7 @@ export async function fetchTopRecipientsByAgency(agencyName: string, limit = 10)
     .from('project')
     .select('project_id, organization_id, budget_year')
     .in('organization_id', orgIds)
-    .eq('budget_year', 2024);
+    .eq('budget_year', BUDGET_YEAR.CURRENT);
   if (pErr) throw pErr;
   const projectRows = (projects ?? []) as ProjectRow[];
   if (!projectRows.length) return [];
@@ -114,12 +114,12 @@ export async function fetchTopRecipientsByAgency(agencyName: string, limit = 10)
   return result;
 }
 
-export async function fetchTopRecipientsByProject(projectId: number, limit = 10): Promise<RecipientAgg[]> {
+export async function fetchTopRecipientsByProject(projectId: number, limit = PAGINATION.DEFAULT_LIMIT): Promise<RecipientAgg[]> {
   const numericId = Number(projectId);
   const key = `project::${numericId}::${limit}`;
   const now = Date.now();
   const cached = recipientCache.get(key);
-  if (cached && now - cached.at < RECIPIENT_TTL_MS) return cached.data;
+  if (cached && now - cached.at < CACHE_TTL.RECIPIENT) return cached.data;
 
   if (!Number.isFinite(numericId)) {
     throw new Error('Invalid project id for recipient lookup');
@@ -175,14 +175,13 @@ type CompanyOverview = {
   contract_methods: Array<{ name: string; count: number; value: number }>;
 };
 
-const COMPANY_TTL_MS = Number(process.env.COMPANY_TTL_MS || 10 * 60 * 1000);
 const companyCache = new Map<string, { at: number; data: CompanyOverview | null }>();
 
 export async function fetchCompanyOverview(input: { corporate_number?: string; name?: string; limit?: number }): Promise<CompanyOverview | null> {
   const key = JSON.stringify(input);
   const now = Date.now();
   const cached = companyCache.get(key);
-  if (cached && now - cached.at < COMPANY_TTL_MS) return cached.data;
+  if (cached && now - cached.at < CACHE_TTL.COMPANY) return cached.data;
 
   const { corporate_number, name } = input;
   if (!corporate_number && !name) return null;
@@ -192,7 +191,7 @@ export async function fetchCompanyOverview(input: { corporate_number?: string; n
   let spQuery = supabase
     .from('project_spending')
     .select('block_id, recipient_name, corporate_number, amount, contract_method')
-    .limit(10000);
+    .limit(QUERY_LIMITS.COMPANY_SPENDING);
   if (corporate_number) spQuery = spQuery.eq('corporate_number', corporate_number);
   else if (name) spQuery = spQuery.ilike('recipient_name', `%${name}%`);
   const { data: spendings, error: spErr } = await spQuery;
@@ -200,7 +199,7 @@ export async function fetchCompanyOverview(input: { corporate_number?: string; n
   const spendingRows = (spendings ?? []) as SpendingRow[];
   if (!spendingRows.length) { companyCache.set(key, { at: now, data: null }); return null; }
 
-  const blockIds = Array.from(new Set(spendingRows.map(s => s.block_id))).slice(0, 10000);
+  const blockIds = Array.from(new Set(spendingRows.map(s => s.block_id))).slice(0, QUERY_LIMITS.COMPANY_BLOCKS);
   const { data: blocks, error: bErr } = await supabase
     .from('project_spending_block')
     .select('block_id, project_id')
@@ -272,9 +271,9 @@ export async function fetchCompanyOverview(input: { corporate_number?: string; n
     corporate_number: cnFinal,
     total_amount: total,
     projects_count: projectIds.size,
-    by_agency: Array.from(byAgency.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, input.limit ?? 6),
+    by_agency: Array.from(byAgency.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, input.limit ?? PAGINATION.TOP_RESULTS_LIMIT),
     by_year: Array.from(byYear.entries()).map(([year, value]) => ({ year: Number(year), value })).sort((a, b) => a.year - b.year),
-    contract_methods: Array.from(byContract.entries()).map(([name, v]) => ({ name, count: v.count, value: v.value })).sort((a, b) => b.value - a.value).slice(0, 6),
+    contract_methods: Array.from(byContract.entries()).map(([name, v]) => ({ name, count: v.count, value: v.value })).sort((a, b) => b.value - a.value).slice(0, PAGINATION.TOP_RESULTS_LIMIT),
   };
 
   companyCache.set(key, { at: Date.now(), data: overview });
