@@ -39,7 +39,7 @@ type RecipientAgg = {
 
 const recipientCache = new Map<string, { at: number; data: RecipientAgg[] }>();
 
-export async function fetchTopRecipientsByAgency(agencyName: string, limit = PAGINATION.DEFAULT_LIMIT): Promise<RecipientAgg[]> {
+export async function fetchTopRecipientsByAgency(agencyName: string, limit: number = PAGINATION.DEFAULT_LIMIT): Promise<RecipientAgg[]> {
   const key = `${agencyName}::${limit}`;
   const now = Date.now();
   const cached = recipientCache.get(key);
@@ -114,7 +114,7 @@ export async function fetchTopRecipientsByAgency(agencyName: string, limit = PAG
   return result;
 }
 
-export async function fetchTopRecipientsByProject(projectId: number, limit = PAGINATION.DEFAULT_LIMIT): Promise<RecipientAgg[]> {
+export async function fetchTopRecipientsByProject(projectId: number, limit: number = PAGINATION.DEFAULT_LIMIT): Promise<RecipientAgg[]> {
   const numericId = Number(projectId);
   const key = `project::${numericId}::${limit}`;
   const now = Date.now();

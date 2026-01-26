@@ -29,7 +29,7 @@ const OutcomesPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [displayCount, setDisplayCount] = useState(DEFAULT_DISPLAY);
 
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (debounceRef.current) {

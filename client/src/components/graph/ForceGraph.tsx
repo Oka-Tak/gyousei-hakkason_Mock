@@ -33,7 +33,7 @@ export interface ForceGraphProps {
 const ForceGraph: React.FC<ForceGraphProps> = (props) => {
   const { nodes, links, colorMap, nodeSizeByGroup, isMobile = false, width: widthProp, height: heightProp, linkDistance: linkDistanceProp, chargeStrength: chargeStrengthProp, focusedNodeId = null, highlightNodeIds = [], highlightEdges = [], onNodeClick, onBackgroundClick, onZoomReady, svgStyle, showTopLevelLabels = false } = props;
   const svgRef = useRef<SVGSVGElement | null>(null);
-  const zoomRef = useRef<d3.ZoomBehavior<Element, unknown> | null>(null);
+  const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
 
   const metrics = useMemo(() => {
     const minEdgeWidth = 1.5;
@@ -64,10 +64,10 @@ const ForceGraph: React.FC<ForceGraphProps> = (props) => {
       zoomLayer.attr('transform', event.transform.toString());
     };
     const zoom = d3.zoom<SVGSVGElement, unknown>().scaleExtent([0.1, 4]).on('zoom', zoomed);
-    zoomRef.current = zoom as d3.ZoomBehavior<Element, unknown>;
+    zoomRef.current = zoom;
     svg.call(zoom);
     svg.call(zoom.transform, d3.zoomIdentity.translate(0, 0).scale(1));
-    if (onZoomReady) onZoomReady(zoom as d3.ZoomBehavior<Element, unknown>);
+    if (onZoomReady) onZoomReady(zoom as unknown as d3.ZoomBehavior<Element, unknown>);
 
     const link = linkGroup.selectAll('line').data(links).join('line')
       .attr('stroke-width', d => metrics.edgeWidthScale(d.value))
@@ -208,8 +208,7 @@ const ForceGraph: React.FC<ForceGraphProps> = (props) => {
         const containerH = heightProp ?? (isMobile ? window.innerHeight - 56 : window.innerHeight);
         const tx = containerW / 2 - x * scale;
         const ty = containerH / 2 - y * scale;
-        const zoomBehavior = zoomRef.current as d3.ZoomBehavior<SVGSVGElement, unknown>;
-        svg.transition().duration(400).call(zoomBehavior.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
+        svg.transition().duration(400).call(zoomRef.current.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
       }
       svg.selectAll<SVGGElement, GraphNodeDatum>('.node-group').select('circle')
         .attr('stroke', d => d.id === target.id ? '#e17055' : '#fff')

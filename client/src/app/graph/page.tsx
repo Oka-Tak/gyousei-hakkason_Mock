@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import Fuse from 'fuse.js';
 import Link from 'next/link';
@@ -23,7 +23,7 @@ const NAV_LINKS = [
   { href: '/insight', label: 'インサイト' },
 ];
 
-const GraphPage: React.FC = () => {
+const GraphPageContent: React.FC = () => {
   const searchParams = useSearchParams();
   const initialSearch = searchParams.get('search') || '';
 
@@ -139,6 +139,14 @@ const GraphPage: React.FC = () => {
         <button style={{ width: 40, height: 40, borderRadius: 8, fontSize: 20, background: '#fff', border: '1px solid #ccc', cursor: 'pointer' }} onClick={() => { const svg = document.querySelector('svg'); if (svg && zoomRef.current) d3.select(svg as unknown as Element).transition().duration(300).call((zoomRef.current as any).transform, d3.zoomIdentity.translate(0, 0).scale(1)); }} aria-label="中心に戻る">⦿</button>
       </div>
     </div>
+  );
+};
+
+const GraphPage: React.FC = () => {
+  return (
+    <Suspense fallback={<LoadingOverlay title="ZAIMYAKU" message="ページを読み込んでいます..." variant="pulse" dotsCount={3} />}>
+      <GraphPageContent />
+    </Suspense>
   );
 };
 
