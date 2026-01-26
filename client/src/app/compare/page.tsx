@@ -290,8 +290,8 @@ const ComparePage: React.FC = () => {
 
     try {
       await runComparison(leftReq, rightReq, true);
-    } catch (err) {
-      console.error(err);
+    } catch {
+      // エラーは runComparison 内で既にハンドリング済み
     }
   }, [leftType, leftInput, leftProjectSelection, rightType, rightInput, rightProjectSelection, runComparison]);
 

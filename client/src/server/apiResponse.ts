@@ -55,7 +55,6 @@ export function notFoundError(message: string): NextResponse<ApiErrorResponse> {
 
 export function internalError(error: unknown): NextResponse<ApiErrorResponse> {
   const message = error instanceof Error ? error.message : String(error);
-  console.error('[API Error]', error);
   return createErrorResponse(ErrorCodes.INTERNAL_ERROR, message, 500);
 }
 
