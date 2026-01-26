@@ -1,4 +1,5 @@
 import * as d3 from 'd3';
+import { SpendingItem } from '@/types';
 
 export type GraphNodeDatum = d3.SimulationNodeDatum & {
   id: string;
@@ -9,7 +10,7 @@ export type GraphNodeDatum = d3.SimulationNodeDatum & {
   url?: string;
   initial_budget?: number;
   topLevel: string;
-  spending_list?: any[];
+  spending_list?: SpendingItem[];
   project_id?: string;
 };
 
