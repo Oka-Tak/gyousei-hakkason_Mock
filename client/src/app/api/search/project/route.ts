@@ -1,6 +1,6 @@
-import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { searchProjectsSemantically, OpenAIConfigError, SemanticSearchServiceError } from '@/server/semanticSearch';
+import { successResponse, validationError, internalError, serviceUnavailableError, createErrorResponse, ErrorCodes } from '@/server/apiResponse';
 
 const QuerySchema = z.object({
   q: z.string().min(1, '検索語を入力してください'),
@@ -24,7 +24,7 @@ export async function GET(request: Request) {
     const parseResult = QuerySchema.safeParse(input);
 
     if (!parseResult.success) {
-      return NextResponse.json({ error: parseResult.error.issues }, { status: 400 });
+      return validationError(parseResult.error.issues);
     }
 
     const matches = await searchProjectsSemantically({
@@ -33,15 +33,14 @@ export async function GET(request: Request) {
       threshold: parseResult.data.threshold,
     });
 
-    return NextResponse.json({ matches });
+    return successResponse({ matches });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
     if (error instanceof OpenAIConfigError) {
-      return NextResponse.json({ error: { code: 'OPENAI_API_KEY_MISSING', message } }, { status: 503 });
+      return serviceUnavailableError('OPENAI_API_KEY_MISSING', error.message);
     }
     if (error instanceof SemanticSearchServiceError) {
-      return NextResponse.json({ error: { code: error.code, message } }, { status: 502 });
+      return createErrorResponse(error.code as typeof ErrorCodes[keyof typeof ErrorCodes], error.message, 502);
     }
-    return NextResponse.json({ error: { message } }, { status: 500 });
+    return internalError(error);
   }
 }

@@ -1,12 +1,11 @@
-import { NextResponse } from 'next/server';
 import { fetchMainData } from '@/server/dataService';
+import { successResponse, internalError } from '@/server/apiResponse';
 
 export async function GET() {
   try {
     const rows = await fetchMainData();
-    return NextResponse.json(rows);
+    return successResponse(rows);
   } catch (error) {
-    console.error('Error fetching data:', error);
-    return NextResponse.json({ error: 'Failed to fetch data' }, { status: 500 });
+    return internalError(error);
   }
 }
