@@ -15,13 +15,6 @@
   .node-group text {
     font-size: 12px !important;
   }
-  /* .node-group circle の r: 12 !important; はSVG属性としては効かないため削除 */
-  .backButton {
-    top: 10px !important;
-    left: 10px !important;
-    font-size: 14px !important;
-    padding: 7px 10px !important;
-  }
 }
 
 .navLinkButton {
