@@ -1,95 +1,47 @@
 // データベースから取得される生データの型定義
 export interface RawProjectData {
-  project_id?: string | number;
-  budget_year?: number;
-  project_year?: number;
-  organization_id?: string;
-  initial_budget_total?: number;
-  adjustment_total?: number;
-  carryover_from_previous_total?: number;
-  contingency_total?: number;
-  agency_name?: string;
-  ministry_name?: string;
-  agency_name_yomi?: string;
-  ministry_name_yomi?: string;
-  bureau_agency?: string;
-  bureau_agency_yomi?: string;
-  department?: string;
-  department_yomi?: string;
-  division?: string;
-  division_yomi?: string;
-  office?: string;
-  office_yomi?: string;
-  section?: string;
-  section_yomi?: string;
-  group?: string;
-  group_yomi?: string;
-  team?: string;
-  team_yomi?: string;
-  project_name?: string;
-  project_name_yomi?: string;
-  review_sheet_url?: string;
+  project_id?: string | number | null;
+  budget_year?: number | null;
+  project_year?: number | null;
+  organization_id?: string | number | null;
+  initial_budget_total?: number | null;
+  adjustment_total?: number | null;
+  carryover_from_previous_total?: number | null;
+  contingency_total?: number | null;
+  agency_name?: string | null;
+  ministry_name?: string | null;
+  agency_name_yomi?: string | null;
+  ministry_name_yomi?: string | null;
+  bureau_agency?: string | null;
+  bureau_agency_yomi?: string | null;
+  department?: string | null;
+  department_yomi?: string | null;
+  division?: string | null;
+  division_yomi?: string | null;
+  office?: string | null;
+  office_yomi?: string | null;
+  section?: string | null;
+  section_yomi?: string | null;
+  group?: string | null;
+  group_yomi?: string | null;
+  team?: string | null;
+  team_yomi?: string | null;
+  project_name?: string | null;
+  project_name_yomi?: string | null;
+  review_sheet_url?: string | null;
   spending_list?: SpendingItem[];
   initial_budget?: number;
   total_budget?: number;
 }
 
-// ノードの型定義（グラフ表示用）
-export interface GraphNode {
-  id: string;
-  name: string;
-  group: string;
-  topLevel: string;
-  spending_list?: SpendingItem[];
-  x?: number;
-  y?: number;
-  fx?: number | null;
-  fy?: number | null;
-}
-
-// リンクの型定義（グラフ表示用）
-export interface GraphLink {
-  source: string | GraphNode;
-  target: string | GraphNode;
-  value: number;
-}
-
 // 支出項目の型定義
 export interface SpendingItem {
-  initial_budget_total?: number;
-  adjustment_total?: number;
-  carryover_from_previous_total?: number;
-  contingency_total?: number;
-  recipient_name?: string;
-  corporate_number?: string;
-  amount?: number;
-  block_name?: string;
-}
-
-// D3のイベント型定義
-export interface D3DragEvent<T = GraphNode> {
-  x: number;
-  y: number;
-  dx: number;
-  dy: number;
-  subject: T;
-}
-
-// APIレスポンスの型定義
-export interface ApiResponse<T> {
-  data: T[];
-  error?: string;
-}
-
-// ズーム変換の型定義（D3用）
-export interface ZoomTransform {
-  x: number;
-  y: number;
-  k: number;
-}
-
-// 検索結果の型定義
-export interface SearchResult {
-  item: GraphNode;
-  refIndex: number;
+  initial_budget_total?: number | null;
+  adjustment_total?: number | null;
+  carryover_from_previous_total?: number | null;
+  contingency_total?: number | null;
+  recipient_name?: string | null;
+  corporate_number?: string | null;
+  amount?: number | null;
+  block_name?: string | null;
 }

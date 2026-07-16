@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from 'react';
-import { useMainGraphData } from '@/features/graph/hooks/useGraphData';
+import React, { useEffect, useState } from 'react';
+import { useAgencies } from '@/features/agencies/hooks/useAgencies';
 import { formatPercent } from '@/utils/format';
 import Money from '@/components/common/Money';
 import { useToast } from '@/components/common/Toast';
+import { useIsMobile } from '@/hooks/useIsMobile';
 
 type Summary = {
   total: number;
@@ -24,22 +25,15 @@ const EXPANDED_RECIPIENTS_LIMIT = 50;
 
 const InsightPage: React.FC = () => {
   const { showToast } = useToast();
-  const [isMobile, setIsMobile] = useState(false);
-  useEffect(() => {
-    const f = () => setIsMobile(window.innerWidth <= 600);
-    f();
-    window.addEventListener('resize', f);
-    return () => window.removeEventListener('resize', f);
-  }, []);
+  const isMobile = useIsMobile();
 
-  const { allAgencies } = useMainGraphData([]);
+  const { agencies } = useAgencies();
   const [agency, setAgency] = useState('');
   const [summary, setSummary] = useState<Summary | null>(null);
   const [recipients, setRecipients] = useState<RecipientItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recipientsExpanded, setRecipientsExpanded] = useState(false);
-  const agencies = useMemo(() => allAgencies || [], [allAgencies]);
 
   const loadData = async (ag: string, limit = DEFAULT_RECIPIENTS_LIMIT) => {
     try {
