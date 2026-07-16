@@ -13,7 +13,7 @@ export const MAIN_HIERARCHY = [
 
 export const SUBGRAPH_HIERARCHY = [...MAIN_HIERARCHY, 'project_name'] as const;
 
-export type HierarchyKey = (typeof SUBGRAPH_HIERARCHY)[number];
+type HierarchyKey = (typeof SUBGRAPH_HIERARCHY)[number];
 
 export interface BuildGraphOptions {
   hierarchy: readonly HierarchyKey[];

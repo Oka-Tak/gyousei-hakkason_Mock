@@ -3,11 +3,11 @@ import { readText, csvToObjects } from './csv';
 
 const dataDir = path.join(process.cwd(), 'data');
 
-type AnyRec = Record<string, string>;
+export type CsvRecord = Record<string, string>;
 
-let cache: Record<string, AnyRec[]> = {};
+const cache: Record<string, CsvRecord[]> = {};
 
-function loadCsvOnce(filename: string): AnyRec[] {
+function loadCsvOnce(filename: string): CsvRecord[] {
   if (cache[filename]) return cache[filename];
   const p = path.join(dataDir, filename);
   const text = readText(p);
@@ -16,38 +16,26 @@ function loadCsvOnce(filename: string): AnyRec[] {
   return rows;
 }
 
-export function loadProjectOverview(): AnyRec[] {
+export function loadProjectOverview(): CsvRecord[] {
   return loadCsvOnce('1-2_RS_2024_基本情報_事業概要等.csv');
 }
 
-export function loadPolicyLaw(): AnyRec[] {
+export function loadPolicyLaw(): CsvRecord[] {
   return loadCsvOnce('1-3_RS_2024_基本情報_政策・施策、法令等.csv');
 }
 
-export function loadSubsidy(): AnyRec[] {
+export function loadSubsidy(): CsvRecord[] {
   return loadCsvOnce('1-4_RS_2024_基本情報_補助率等.csv');
 }
 
-export function loadRelatedProjects(): AnyRec[] {
+export function loadRelatedProjects(): CsvRecord[] {
   return loadCsvOnce('1-5_RS_2024_基本情報_関連事業.csv');
 }
 
-export function loadKpiSeries(): AnyRec[] {
+export function loadKpiSeries(): CsvRecord[] {
   return loadCsvOnce('3-1_RS_2024_効果発現経路_目標・実績.csv');
 }
 
-export function loadKpiLinks(): AnyRec[] {
+export function loadKpiLinks(): CsvRecord[] {
   return loadCsvOnce('3-2_RS_2024_効果発現経路_目標のつながり.csv');
 }
-
-export function findProjectIdsByName(part: string): string[] {
-  const list = loadProjectOverview();
-  const p = (part || '').toLowerCase();
-  const set = new Set<string>();
-  for (const r of list) {
-    const name = (r['事業名'] || '').toLowerCase();
-    if (!p || name.includes(p)) set.add(r['予算事業ID']);
-  }
-  return Array.from(set);
-}
-

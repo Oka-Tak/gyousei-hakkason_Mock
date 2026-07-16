@@ -3,7 +3,7 @@
 import React from 'react';
 import spotlightStyles from '@/styles/SpotlightSearch.module.css';
 
-export interface SearchResultItem { id: string; name: string; }
+interface SearchResultItem { id: string; name: string; }
 
 interface ControlsProps {
   isMobile?: boolean;

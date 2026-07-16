@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { searchProjectsSemantically, OpenAIConfigError, SemanticSearchServiceError } from '@/server/semanticSearch';
-import { successResponse, validationError, internalError, serviceUnavailableError, createErrorResponse, ErrorCodes } from '@/server/apiResponse';
+import { successResponse, validationError, internalError, serviceUnavailableError, createErrorResponse } from '@/server/apiResponse';
 
 const QuerySchema = z.object({
   q: z.string().min(1, '検索語を入力してください'),
@@ -39,7 +39,7 @@ export async function GET(request: Request) {
       return serviceUnavailableError('OPENAI_API_KEY_MISSING', error.message);
     }
     if (error instanceof SemanticSearchServiceError) {
-      return createErrorResponse(error.code as typeof ErrorCodes[keyof typeof ErrorCodes], error.message, 502);
+      return createErrorResponse(error.code, error.message, 502);
     }
     return internalError(error);
   }

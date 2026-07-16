@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 // SpendingItemのZodスキーマ
-export const SpendingItemSchema = z.object({
+const SpendingItemSchema = z.object({
   initial_budget_total: z.number().nullable().optional(),
   adjustment_total: z.number().nullable().optional(),
   carryover_from_previous_total: z.number().nullable().optional(),

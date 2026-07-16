@@ -11,7 +11,7 @@ import * as d3 from 'd3';
 import type { GraphLinkDatum, GraphNodeDatum } from '@/features/graph/types';
 import { formatJaYen } from '@/utils/format';
 
-export type NodeSizeMap = Record<string, number>;
+type NodeSizeMap = Record<string, number>;
 
 export interface ForceGraphHandle {
   zoomBy: (factor: number) => void;

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
-export interface ApiErrorResponse {
+interface ApiErrorResponse {
   error: {
     code: string;
     message: string;
@@ -9,20 +9,15 @@ export interface ApiErrorResponse {
   };
 }
 
-export type ApiSuccessResponse<T> = T;
+type ApiSuccessResponse<T> = T;
 
-export const ErrorCodes = {
+const ErrorCodes = {
   VALIDATION_ERROR: 'VALIDATION_ERROR',
-  NOT_FOUND: 'NOT_FOUND',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
-  SERVICE_UNAVAILABLE: 'SERVICE_UNAVAILABLE',
-  BAD_REQUEST: 'BAD_REQUEST',
 } as const;
 
-export type ErrorCode = typeof ErrorCodes[keyof typeof ErrorCodes];
-
 export function createErrorResponse(
-  code: ErrorCode,
+  code: string,
   message: string,
   status: number,
   details?: unknown
@@ -49,21 +44,13 @@ export function validationError(issues: z.ZodIssue[]): NextResponse<ApiErrorResp
   );
 }
 
-export function notFoundError(message: string): NextResponse<ApiErrorResponse> {
-  return createErrorResponse(ErrorCodes.NOT_FOUND, message, 404);
-}
-
 export function internalError(error: unknown): NextResponse<ApiErrorResponse> {
   const message = error instanceof Error ? error.message : String(error);
   return createErrorResponse(ErrorCodes.INTERNAL_ERROR, message, 500);
 }
 
 export function serviceUnavailableError(code: string, message: string): NextResponse<ApiErrorResponse> {
-  return createErrorResponse(code as ErrorCode, message, 503);
-}
-
-export function badRequestError(message: string): NextResponse<ApiErrorResponse> {
-  return createErrorResponse(ErrorCodes.BAD_REQUEST, message, 400);
+  return createErrorResponse(code, message, 503);
 }
 
 export function successResponse<T>(data: T, status = 200): NextResponse<ApiSuccessResponse<T>> {

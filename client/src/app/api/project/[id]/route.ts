@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { loadProjectOverview, loadPolicyLaw, loadSubsidy, loadRelatedProjects, loadKpiSeries, loadKpiLinks } from '@/server/dataCatalog';
+import { loadProjectOverview, loadPolicyLaw, loadSubsidy, loadRelatedProjects, loadKpiSeries, loadKpiLinks, type CsvRecord } from '@/server/dataCatalog';
 import { normalizePercentSeries, normalizeUnit } from '@/server/unit';
+import type { ProjectDetail } from '@/types/project';
 
 export async function GET(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params;
     const overviewAll = loadProjectOverview().filter(r => r['予算事業ID'] === id);
     // pick latest by 事業年度 if multiple
-    const pickLatest = (rows: any[]) => {
+    const pickLatest = (rows: CsvRecord[]) => {
       if (!rows.length) return null;
       const withYear = rows.map(r => ({ r, y: Number(r['事業年度'] || r['予算年度'] || '0') }));
       withYear.sort((a,b) => b.y - a.y);
@@ -60,7 +61,8 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
       reason: r['後続アウトカムへのつながり']
     }));
 
-    return NextResponse.json({ id, overview, policies, subsidies, related, kpis, links });
+    const detail = { id, overview, policies, subsidies, related, kpis, links } satisfies ProjectDetail;
+    return NextResponse.json(detail);
   } catch (e: unknown) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
   }

@@ -7,7 +7,7 @@ export function readText(path: string): string {
   return text;
 }
 
-export function parseCsv(text: string): string[][] {
+function parseCsv(text: string): string[][] {
   const rows: string[][] = [];
   let i = 0;
   const n = text.length;
@@ -51,4 +51,3 @@ export function csvToObjects(text: string): Array<Record<string, string>> {
   }
   return out;
 }
-
