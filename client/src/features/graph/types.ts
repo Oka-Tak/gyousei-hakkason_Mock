@@ -6,6 +6,8 @@ export type GraphNodeDatum = d3.SimulationNodeDatum & {
   name: string;
   yomi?: string;
   group: string;
+  depth: number;
+  parentId: string | null;
   value: number;
   url?: string;
   initial_budget?: number;
@@ -19,4 +21,3 @@ export type GraphLinkDatum = d3.SimulationLinkDatum<GraphNodeDatum> & {
   source: GraphNodeDatum;
   target: GraphNodeDatum;
 };
-

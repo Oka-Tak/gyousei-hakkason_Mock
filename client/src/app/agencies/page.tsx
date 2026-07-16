@@ -1,13 +1,16 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
-import ForceGraph from "@/components/graph/ForceGraph";
+import React, { useMemo, useState } from "react";
+import LazyForceGraph from "@/components/graph/LazyForceGraph";
 import { NODE_SIZE_BY_GROUP } from "@/features/graph/constants";
 import { useMainGraphData } from "@/features/graph/hooks/useGraphData";
 import type { GraphNodeDatum, GraphLinkDatum } from "@/features/graph/types";
 import Money from "@/components/common/Money";
+import { limitGraph } from "@/features/graph/buildGraph";
+import { useIsMobile } from "@/hooks/useIsMobile";
 
 type TileSize = 'small' | 'medium' | 'large';
+type SortKey = 'name' | 'value_desc' | 'nodes_desc';
 const TILE_SIZES: Record<TileSize, { w: number; h: number }> = {
   small: { w: 300, h: 240 },
   medium: { w: 360, h: 280 },
@@ -15,39 +18,38 @@ const TILE_SIZES: Record<TileSize, { w: number; h: number }> = {
 };
 
 const AgenciesPage: React.FC = () => {
-  const [isMobile, setIsMobile] = useState(false);
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth <= 600);
-    check();
-    window.addEventListener("resize", check);
-    return () => window.removeEventListener("resize", check);
-  }, []);
+  const isMobile = useIsMobile();
 
   // Fetch all data once; filtering happens client-side per ministry/agency
-  const [visibleAgencies, setVisibleAgencies] = useState<string[]>([]);
-  const { nodes, links, colorMap, loading, error, allAgencies } = useMainGraphData(visibleAgencies);
-
-  // default to all agencies when loaded
-  useEffect(() => {
-    if (allAgencies && allAgencies.length && visibleAgencies.length === 0) {
-      setVisibleAgencies(allAgencies);
-    }
-  }, [allAgencies, visibleAgencies.length]);
+  const { nodes, links, colorMap, loading, error, allAgencies } = useMainGraphData(null, { maxNodes: null });
 
   // Controls
   const [query, setQuery] = useState("");
-  const [sortKey, setSortKey] = useState<'name' | 'value_desc' | 'nodes_desc'>('name');
+  const [sortKey, setSortKey] = useState<SortKey>('name');
   const [tileSize, setTileSize] = useState<TileSize>('medium');
 
+  const graphsByTopLevel = useMemo(() => {
+    const grouped = new Map<string, { nodes: GraphNodeDatum[]; links: GraphLinkDatum[] }>();
+    nodes.forEach((node) => {
+      const graph = grouped.get(node.topLevel) ?? { nodes: [], links: [] };
+      graph.nodes.push(node);
+      grouped.set(node.topLevel, graph);
+    });
+    links.forEach((link) => {
+      const topLevel = (link.source as GraphNodeDatum).topLevel;
+      grouped.get(topLevel)?.links.push(link);
+    });
+    return grouped;
+  }, [links, nodes]);
+
   const agenciesToShow = useMemo(() => {
-    const base = (visibleAgencies.length ? visibleAgencies : allAgencies) || [];
+    const base = allAgencies || [];
     const filtered = query ? base.filter(a => a.toLowerCase().includes(query.toLowerCase())) : base;
-    // temp graphs info for sorting
     const temp = filtered.map(top => {
-      const n = nodes.filter(x => x.topLevel === top);
-      const topNode = n.find(x => x.group === 'agency_name' || x.group === 'ministry_name');
+      const graph = graphsByTopLevel.get(top);
+      const topNode = graph?.nodes.find((node) => node.depth === 0);
       const value = topNode?.value || 0;
-      return { top, count: n.length, value };
+      return { top, count: graph?.nodes.length ?? 0, value };
     });
     temp.sort((a, b) => {
       if (sortKey === 'name') return a.top.localeCompare(b.top, 'ja');
@@ -55,25 +57,32 @@ const AgenciesPage: React.FC = () => {
       return (b.count || 0) - (a.count || 0);
     });
     return temp.map(t => t.top);
-  }, [visibleAgencies, allAgencies, nodes, query, sortKey]);
+  }, [allAgencies, graphsByTopLevel, query, sortKey]);
 
   const graphs = useMemo(() => {
-    if (!nodes.length) return [] as {
+    if (!nodes.length) return [] as Array<{
       topLevel: string;
       nodes: GraphNodeDatum[];
       links: GraphLinkDatum[];
       colorMap: Record<string, string>;
-    }[];
-    return agenciesToShow.map((top) => {
-      const n = nodes.filter((x) => x.topLevel === top);
-      const idSet = new Set(n.map((x) => x.id));
-      const l = links.filter(
-        (e) => idSet.has(e.source.id) && idSet.has(e.target.id)
-      );
-      const cmap: Record<string, string> = { [top]: colorMap[top] };
-      return { topLevel: top, nodes: n, links: l, colorMap: cmap };
+      allNodeCount: number;
+      allLinkCount: number;
+    }>;
+
+    const previewLimit = tileSize === 'small' ? 70 : tileSize === 'medium' ? 90 : 110;
+    return agenciesToShow.flatMap((topLevel) => {
+      const graph = graphsByTopLevel.get(topLevel);
+      if (!graph) return [];
+      const preview = limitGraph(graph.nodes, graph.links, previewLimit);
+      return [{
+        topLevel,
+        ...preview,
+        colorMap: { [topLevel]: colorMap[topLevel] },
+        allNodeCount: graph.nodes.length,
+        allLinkCount: graph.links.length,
+      }];
     });
-  }, [nodes, links, colorMap, agenciesToShow]);
+  }, [agenciesToShow, colorMap, graphsByTopLevel, nodes.length, tileSize]);
 
   if (loading) return <div style={{ padding: 16 }}>Loading...</div>;
   if (error) return <div style={{ padding: 16, color: "crimson" }}>エラー: {error}</div>;
@@ -92,7 +101,7 @@ const AgenciesPage: React.FC = () => {
         />
         <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           並び替え
-          <select value={sortKey} onChange={(e) => setSortKey(e.target.value as any)} style={{ padding: '6px 8px', border: '1px solid #ddd', borderRadius: 6 }}>
+          <select value={sortKey} onChange={(e) => setSortKey(e.target.value as SortKey)} style={{ padding: '6px 8px', border: '1px solid #ddd', borderRadius: 6 }}>
             <option value="name">名前順</option>
             <option value="value_desc">総額の大きい順</option>
             <option value="nodes_desc">ノード数の多い順</option>
@@ -106,7 +115,6 @@ const AgenciesPage: React.FC = () => {
             <option value="large">大</option>
           </select>
         </label>
-        
       </div>
 
       <div
@@ -116,12 +124,11 @@ const AgenciesPage: React.FC = () => {
           gap: 16,
         }}
       >
-        {graphs.map(({ topLevel, nodes, links, colorMap }) => {
-          const topNode = nodes.find((n) => n.group === 'agency_name' || n.group === 'ministry_name');
+        {graphs.map(({ topLevel, nodes, links, colorMap, allNodeCount, allLinkCount }) => {
+          const fullGraph = graphsByTopLevel.get(topLevel);
+          const topNode = fullGraph?.nodes.find((node) => node.depth === 0);
           const total = topNode?.value || 0;
-          const firstLevelCount = nodes.filter(n => (n.id.split('→').length === 2)).length;
-          const depth = nodes.reduce((m, n) => Math.max(m, n.id.split('→').length - 1), 0);
-          const Amount = ({ v }: { v: number }) => <Money amount={v} />;
+          const firstLevelCount = fullGraph?.nodes.filter((node) => node.depth === 1).length ?? 0;
           return (
             <div key={topLevel} style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: 10, background: "#fff", boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "2px 8px 6px 8px" }}>
@@ -143,11 +150,11 @@ const AgenciesPage: React.FC = () => {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, padding: '4px 8px 8px 8px' }}>
                 <div style={{ background: '#f8fafc', border: '1px solid #eef2f7', borderRadius: 8, padding: '6px 8px' }}>
                   <div style={{ fontSize: 10, color: '#64748b' }}>総額</div>
-                  <div style={{ fontWeight: 700, fontSize: 13 }}><Amount v={total} /></div>
+                  <div style={{ fontWeight: 700, fontSize: 13 }}><Money amount={total} /></div>
                 </div>
                 <div style={{ background: '#f8fafc', border: '1px solid #eef2f7', borderRadius: 8, padding: '6px 8px' }}>
                   <div style={{ fontSize: 10, color: '#64748b' }}>ノード数</div>
-                  <div style={{ fontWeight: 700, fontSize: 13 }}>{nodes.length}</div>
+                  <div style={{ fontWeight: 700, fontSize: 13 }}>{allNodeCount}</div>
                 </div>
                 <div style={{ background: '#f8fafc', border: '1px solid #eef2f7', borderRadius: 8, padding: '6px 8px' }}>
                   <div style={{ fontSize: 10, color: '#64748b' }}>第一階層</div>
@@ -155,11 +162,11 @@ const AgenciesPage: React.FC = () => {
                 </div>
                 <div style={{ background: '#f8fafc', border: '1px solid #eef2f7', borderRadius: 8, padding: '6px 8px' }}>
                   <div style={{ fontSize: 10, color: '#64748b' }}>リンク数</div>
-                  <div style={{ fontWeight: 700, fontSize: 13 }}>{links.length}</div>
+                  <div style={{ fontWeight: 700, fontSize: 13 }}>{allLinkCount}</div>
                 </div>
               </div>
 
-              <ForceGraph
+              <LazyForceGraph
                 nodes={nodes}
                 links={links}
                 colorMap={colorMap}
