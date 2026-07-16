@@ -50,8 +50,10 @@
 - 環境変数: `OPENAI_API_KEY`（必須）、`OPENAI_EMBEDDING_MODEL`、`SUPABASE_PROJECT_MATCH_RPC`、`PROJECT_MATCH_THRESHOLD`（任意）
 
 ## クライアントロジック
-- `useMainGraphData` / `useSubgraphData`（`src/features/graph/hooks/useGraphData.ts`）: `/api/data` と `/api/subgraph` を呼び出し、階層ノード + リンク + カラーマップを生成
-- `ForceGraph`（`src/components/graph/ForceGraph.tsx`）: D3 の force シミュレーション、ズーム、ドラッグ、ハイライトを担当
+- `useMainGraphData` / `useSubgraphData`（`src/features/graph/hooks/useGraphData.ts`）: `/api/data` と `/api/subgraph` を呼び出し、`buildGraph.ts` で階層ノード + リンク + カラーマップを生成
+- `ForceGraph`（`src/components/graph/ForceGraph.tsx`）: D3 の force シミュレーション、ズーム、ドラッグ、ハイライトを担当。画面外では simulation を停止する
+- `LazyForceGraph`（`src/components/graph/LazyForceGraph.tsx`）: 省庁一覧のミニグラフを表示直前まで遅延生成
+- `useAgencies`（`src/features/agencies/hooks/useAgencies.ts`）: グラフ全体を構築せず `/api/agencies` から省庁名だけを取得
 - `Controls`, `NodeDetails`, `LoadingOverlay`, `Money` など共通 UI コンポーネントで検索・詳細表示・フォーマットを再利用
 
 ## 主なページ（App Router）
@@ -70,6 +72,7 @@
 
 ## API レイヤー（`src/app/api/`）
 - `/api/data` → `fetchMainData`
+- `/api/agencies` → 省庁名の軽量一覧
 - `/api/subgraph` → `fetchSubgraph`
 - `/api/insights/summary` → 省庁別サマリ
 - `/api/insights/recipients` → 受取先上位 N
