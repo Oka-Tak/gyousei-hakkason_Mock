@@ -2,6 +2,7 @@ import { fetchMainData, type MainDataRow } from './dataService';
 import { fetchTopRecipientsByAgency, fetchTopRecipientsByProject } from './insightService';
 import { getSupabase } from './supabaseClient';
 import { BUDGET_YEAR } from './constants';
+import { calculateTotalBudget } from '@/modules/budget/domain/budget';
 
 type CompareTargetAgency = {
   type: 'agency';
@@ -123,11 +124,12 @@ async function fetchProjectSummary(projectId: number): Promise<CompareSummary | 
     .slice(0, 8);
 
   if (total <= 0) {
-    total =
-      Number(project.initial_budget_total ?? 0) +
-      Number(project.adjustment_total ?? 0) +
-      Number(project.carryover_from_previous_total ?? 0) +
-      Number(project.contingency_total ?? 0);
+    total = calculateTotalBudget({
+      initial: project.initial_budget_total,
+      adjustment: project.adjustment_total,
+      carryover: project.carryover_from_previous_total,
+      contingency: project.contingency_total,
+    });
   }
 
   const label = project.project_name || `プロジェクトID ${projectId}`;

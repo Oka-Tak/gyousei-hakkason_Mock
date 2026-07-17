@@ -12,6 +12,7 @@ npm run dev
 本番ビルドと型チェック:
 
 ```bash
+npm test
 npm run typecheck
 npm run build
 ```
@@ -26,3 +27,13 @@ Supabase を利用する API の実行には `SUPABASE_URL` と `SUPABASE_ANON_K
 - `src/features/graph/hooks/useGraphData.ts`: メイン／サブグラフ API とグラフ構築を接続
 
 サブグラフの支出明細は初期ペイロードに含めず、事業ノードを選択した時だけ `/api/project_spending` から取得します。
+
+## モジュール境界
+
+`src/modules/` は読み取りユースケースを軽量 DDD の依存方向で分離します。
+
+- `domain/`: 予算計算、組織パス、KPI 単位などの純粋なドメイン処理とモデル
+- `application/`: Repository Port と、画面・API から呼ばれるユースケース
+- `infrastructure/`: Supabase や CSV を使う Repository Adapter
+
+依存方向は `infrastructure -> application -> domain` とし、`domain` から Next.js、Supabase、D3、ファイルシステムへ依存させません。`src/server/` は既存 API 向けのキャッシュ付きファサードとして段階的に縮小します。

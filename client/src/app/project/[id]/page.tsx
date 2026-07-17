@@ -4,7 +4,7 @@ import React, { useMemo } from 'react';
 import Money from '@/components/common/Money';
 import { formatCountJa } from '@/utils/format';
 import { useApiData } from '@/hooks/useApiData';
-import type { ProjectDetail } from '@/types/project';
+import type { ProjectDetail } from '@/modules/catalog/domain/models';
 
 const Bar: React.FC<{ value: number; max: number; color?: string }> = ({ value, max, color = '#07796b' }) => (
   <div style={{ background: '#e2f6f2', height: 8, borderRadius: 999 }}>

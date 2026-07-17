@@ -1,6 +1,6 @@
-type ProjectOverview = Record<string, string>;
+type ProjectOverview = Readonly<Record<string, string>>;
 
-interface ProjectPolicy {
+export interface ProjectPolicy {
   policy_no: string;
   policy_ministry: string;
   policy: string;
@@ -30,7 +30,7 @@ interface RelatedProject {
   relation: string;
 }
 
-interface ProjectKpi {
+export interface ProjectKpi {
   type: string;
   label: string;
   unit: string;
@@ -56,4 +56,23 @@ export interface ProjectDetail {
   related: RelatedProject[];
   kpis: ProjectKpi[];
   links: ProjectKpiLink[];
+}
+
+export interface OutcomeItem extends ProjectKpi {
+  project_id: string;
+  project_name: string;
+}
+
+export interface PolicyCatalogItem {
+  project_id: string;
+  project_name: string;
+  policy_no: string;
+  ministry: string;
+  policy: string;
+  program: string;
+  url: string;
+  law_no: string;
+  law_name: string;
+  law_id: string;
+  plan_name: string;
 }

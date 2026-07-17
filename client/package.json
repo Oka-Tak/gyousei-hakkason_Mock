@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
+    "test": "tsx --test src/modules/*/domain/*.test.ts src/modules/*/application/*.test.ts src/modules/*/infrastructure/*.test.ts",
     "typecheck": "tsc --noEmit",
     "start": "next start"
   },
@@ -23,6 +24,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "tsx": "^4.23.1",
     "typescript": "^5"
   }
 }

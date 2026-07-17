@@ -3,6 +3,11 @@ import { getSupabase } from './supabaseClient';
 import { BUDGET_YEAR, CACHE_TTL } from './constants';
 import { RawProjectDataSchema } from '@/types/schemas';
 import type { RawProjectData } from '@/types';
+import {
+  matchesOrganizationPath,
+  parseOrganizationNodeId,
+  type OrganizationHierarchy,
+} from '@/modules/budget/domain/organizationPath';
 
 type AgencyRow = {
   agency_id: string;
@@ -38,21 +43,16 @@ const MAX_CACHE_ENTRIES = 100;
 const subgraphCache = new Map<string, CacheEntry>();
 const requestsInFlight = new Map<string, Promise<RawProjectData[]>>();
 
-function organizationPath(row: OrganizationRow): string[] {
-  return [
-    row.bureau_office,
-    row.department,
-    row.division,
-    row.unit,
-    row.section,
-    row.group,
-    row.team,
-  ].filter((value): value is string => Boolean(value));
-}
-
-function matchesPath(row: OrganizationRow, path: readonly string[]): boolean {
-  const candidate = organizationPath(row);
-  return path.every((segment, index) => candidate[index] === segment);
+function toOrganizationHierarchy(row: OrganizationRow): OrganizationHierarchy {
+  return {
+    bureau: row.bureau_office,
+    department: row.department,
+    division: row.division,
+    office: row.unit,
+    section: row.section,
+    group: row.group,
+    team: row.team,
+  };
 }
 
 async function findAgencies(topLevel: string): Promise<AgencyRow[]> {
@@ -74,11 +74,10 @@ async function findAgencies(topLevel: string): Promise<AgencyRow[]> {
 }
 
 async function loadSubgraph(nodeId: string, projectLimit: number): Promise<RawProjectData[]> {
-  const parts = nodeId.split('→').filter(Boolean);
-  const topLevel = parts[0];
-  if (!topLevel) return [];
+  const nodeReference = parseOrganizationNodeId(nodeId);
+  if (!nodeReference) return [];
 
-  const agencyRows = await findAgencies(topLevel);
+  const agencyRows = await findAgencies(nodeReference.topLevel);
   if (agencyRows.length === 0) return [];
 
   const agencyIds = agencyRows.map((agency) => agency.agency_id);
@@ -90,9 +89,11 @@ async function loadSubgraph(nodeId: string, projectLimit: number): Promise<RawPr
 
   // Graph paths omit empty hierarchy levels, so positional database filters can
   // target the wrong column. Normalize each row before matching the path.
-  const path = parts.slice(1);
   const organizationRows = ((organizations ?? []) as OrganizationRow[])
-    .filter((organization) => matchesPath(organization, path));
+    .filter((organization) => matchesOrganizationPath(
+      toOrganizationHierarchy(organization),
+      nodeReference.path,
+    ));
   if (organizationRows.length === 0) return [];
 
   const organizationIds = organizationRows.map((organization) => organization.organization_id);
