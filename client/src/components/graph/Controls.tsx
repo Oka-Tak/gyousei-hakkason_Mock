@@ -3,7 +3,7 @@
 import React from 'react';
 import spotlightStyles from '@/styles/SpotlightSearch.module.css';
 
-export interface SearchResultItem { id: string; name: string; }
+interface SearchResultItem { id: string; name: string; }
 
 interface ControlsProps {
   isMobile?: boolean;
@@ -36,15 +36,32 @@ const Controls: React.FC<ControlsProps> = (props) => {
         <div className={spotlightStyles.spotlightContainer} style={{ position: 'absolute', top: isMobile ? 70 : 80, left: '50%', transform: 'translateX(-50%)', zIndex: 100 }}>
           <input autoFocus type="text" placeholder="ノード名で検索..." value={search} onChange={e => onChangeSearch(e.target.value)} className={spotlightStyles.searchInput} />
           <div className={spotlightStyles.controls}>
-            <button className={spotlightStyles.controlButton} onClick={onPrev} disabled={hitsCount === 0}>＜</button>
+            <button type="button" aria-label="前の検索結果" className={spotlightStyles.controlButton} onClick={onPrev} disabled={hitsCount === 0}>＜</button>
             <span>{hitsCount > 0 ? `${currentIndex + 1} / ${hitsCount}` : '該当なし'}</span>
-            <button className={spotlightStyles.controlButton} onClick={onNext} disabled={hitsCount === 0}>＞</button>
-            <button className={spotlightStyles.closeButton} onClick={onCloseSpotlight}>閉じる</button>
+            <button type="button" aria-label="次の検索結果" className={spotlightStyles.controlButton} onClick={onNext} disabled={hitsCount === 0}>＞</button>
+            <button type="button" className={spotlightStyles.closeButton} onClick={onCloseSpotlight}>閉じる</button>
           </div>
           {search && hitsCount > 0 && (
             <ul style={{ position: 'absolute', top: '100%', left: 0, width: '100%', background: '#fff', border: '1px solid #ccc', borderTop: 'none', borderRadius: '0 0 8px 8px', boxShadow: '0 4px 16px rgba(0,0,0,0.08)', maxHeight: 260, overflowY: 'auto', margin: 0, padding: 0, zIndex: 101, listStyle: 'none' }}>
               {results.map((r, i) => (
-                <li key={r.id} style={{ padding: '8px 16px', background: i === currentIndex ? '#e3f2fd' : '#fff', color: '#333', cursor: 'pointer', borderBottom: '1px solid #eee', fontWeight: i === currentIndex ? 'bold' : 'normal' }} onMouseDown={() => onPickResult(r.id, i)}>{r.name}</li>
+                <li key={r.id} style={{ borderBottom: '1px solid #eee' }}>
+                  <button
+                    type="button"
+                    onClick={() => onPickResult(r.id, i)}
+                    style={{
+                      width: '100%',
+                      padding: '8px 16px',
+                      background: i === currentIndex ? '#e3f2fd' : '#fff',
+                      color: '#333',
+                      cursor: 'pointer',
+                      border: 0,
+                      textAlign: 'left',
+                      fontWeight: i === currentIndex ? 'bold' : 'normal',
+                    }}
+                  >
+                    {r.name}
+                  </button>
+                </li>
               ))}
             </ul>
           )}
@@ -67,4 +84,3 @@ const Controls: React.FC<ControlsProps> = (props) => {
 };
 
 export default Controls;
-

@@ -34,15 +34,15 @@
 
 ### ローカル CSV カタログ
 - 保存場所: `client/data/`
-- ローダー: `src/server/dataCatalog.ts`
-- パーサー: `src/server/csv.ts` の `readText` / `csvToObjects` で BOM 除去・引用符付き CSV を処理し、結果はモジュールスコープの `cache` にキャッシュされる
+- Repository: `src/modules/catalog/infrastructure/csvProjectCatalogRepository.ts`
+- パーサー: `src/modules/catalog/infrastructure/csv.ts` で BOM 除去・引用符付き CSV を処理し、Repository 内の `cache` に結果を保持する
 - 対象ファイル:
   - 事業概要 (`1-2_RS_2024_基本情報_事業概要等.csv`)
   - 政策・法令 (`1-3_RS_2024_基本情報_政策・施策、法令等.csv`)
   - 補助率 (`1-4_RS_2024_基本情報_補助率等.csv`)
   - 関連事業 (`1-5_RS_2024_基本情報_関連事業.csv`)
   - KPI 系列 (`3-1_RS_2024_効果発現経路_目標・実績.csv`, `3-2_RS_2024_効果発現経路_目標のつながり.csv`)
-- 単位の正規化: `src/server/unit.ts`（金額・割合・件数系を円換算／%換算に揃える）
+- 単位の正規化: `src/modules/catalog/domain/unit.ts`（金額・割合・件数系を円換算／%換算に揃える）
 
 ### セマンティック検索
 - API: `/api/search/project`（OpenAI Embeddings でクエリをベクトル化し、Supabase RPC `match_project_semantic` で類似プロジェクトを返す）
@@ -50,8 +50,10 @@
 - 環境変数: `OPENAI_API_KEY`（必須）、`OPENAI_EMBEDDING_MODEL`、`SUPABASE_PROJECT_MATCH_RPC`、`PROJECT_MATCH_THRESHOLD`（任意）
 
 ## クライアントロジック
-- `useMainGraphData` / `useSubgraphData`（`src/features/graph/hooks/useGraphData.ts`）: `/api/data` と `/api/subgraph` を呼び出し、階層ノード + リンク + カラーマップを生成
-- `ForceGraph`（`src/components/graph/ForceGraph.tsx`）: D3 の force シミュレーション、ズーム、ドラッグ、ハイライトを担当
+- `useMainGraphData` / `useSubgraphData`（`src/features/graph/hooks/useGraphData.ts`）: `/api/data` と `/api/subgraph` を呼び出し、`buildGraph.ts` で階層ノード + リンク + カラーマップを生成
+- `ForceGraph`（`src/components/graph/ForceGraph.tsx`）: D3 の force シミュレーション、ズーム、ドラッグ、ハイライトを担当。画面外では simulation を停止する
+- `LazyForceGraph`（`src/components/graph/LazyForceGraph.tsx`）: 省庁一覧のミニグラフを表示直前まで遅延生成
+- `useAgencies`（`src/features/agencies/hooks/useAgencies.ts`）: グラフ全体を構築せず `/api/agencies` から省庁名だけを取得
 - `Controls`, `NodeDetails`, `LoadingOverlay`, `Money` など共通 UI コンポーネントで検索・詳細表示・フォーマットを再利用
 
 ## 主なページ（App Router）
@@ -70,6 +72,7 @@
 
 ## API レイヤー（`src/app/api/`）
 - `/api/data` → `fetchMainData`
+- `/api/agencies` → 省庁名の軽量一覧
 - `/api/subgraph` → `fetchSubgraph`
 - `/api/insights/summary` → 省庁別サマリ
 - `/api/insights/recipients` → 受取先上位 N
@@ -80,7 +83,7 @@
 - `/api/outcomes` → KPI リスト（単位正規化）
 
 ## 型とユーティリティ
-- 型定義: `src/types/index.ts`（`RawProjectData`, `GraphNode`, `GraphLink`, `SpendingItem` など）
+- 型定義: `src/types/index.ts`（外部データ DTO）と `src/modules/**/domain`（ドメインモデル）
 - バリデーション: `src/types/schemas.ts`（Zod スキーマ; `.passthrough()` で柔軟に許容）
 - 型ガード: `src/types/guards.ts`（`isRawProjectData` で API 取得後の配列を検証）
 - グラフ型: `src/features/graph/types.ts`（`GraphNodeDatum`, `GraphLinkDatum` など D3 連携用）
@@ -132,6 +135,7 @@
 
 ## 開発・検証フロー
 - ローカル起動: `cd client && npm install && npm run dev`
+- ドメイン／ユースケーステスト: `cd client && npm test`
 - 環境変数: `.env.local` に Supabase 接続情報を設定（本番キーを含めない）
 - 手動確認: 各ページは API 呼び出し結果を即時描画するため、ブラウザまたは `curl` で API の戻り値を確認
 - データ量調整: 開発時は `MAIN_DATA_LIMIT` を下げてレンダリング負荷を抑える

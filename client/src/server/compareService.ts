@@ -1,27 +1,59 @@
-import { fetchMainData } from './dataService';
+import { fetchMainData, type MainDataRow } from './dataService';
 import { fetchTopRecipientsByAgency, fetchTopRecipientsByProject } from './insightService';
 import { getSupabase } from './supabaseClient';
+import { BUDGET_YEAR } from './constants';
+import { calculateTotalBudget } from '@/modules/budget/domain/budget';
 
-export type CompareTargetAgency = {
+type CompareTargetAgency = {
   type: 'agency';
   value: string;
   label: string;
 };
 
-export type CompareTargetProject = {
+type CompareTargetProject = {
   type: 'project';
   projectId: number;
   label: string;
 };
 
-export type CompareTarget = CompareTargetAgency | CompareTargetProject;
+type CompareTarget = CompareTargetAgency | CompareTargetProject;
 
-export type CompareSummary = {
-  target: CompareTarget;
+type BudgetSummary = {
   total: number;
   projectCount: number;
   firstLevel: Array<{ name: string; value: number }>;
 };
+
+type CompareSummary = BudgetSummary & {
+  target: CompareTarget;
+};
+
+function summarizeRows(rows: readonly MainDataRow[]): BudgetSummary {
+  const total = rows.reduce((sum, row) => sum + Number(row.total_budget || 0), 0);
+  const projectCount = new Set(rows.map((row) => row.project_id)).size;
+  const firstLevel = new Map<string, number>();
+
+  rows.forEach((row) => {
+    const name = row.bureau_agency || 'その他';
+    firstLevel.set(name, (firstLevel.get(name) || 0) + Number(row.total_budget || 0));
+  });
+
+  return {
+    total,
+    projectCount,
+    firstLevel: Array.from(firstLevel, ([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 8),
+  };
+}
+
+export async function fetchAgencyBudgetSummary(agencyName?: string): Promise<BudgetSummary> {
+  const rows = await fetchMainData();
+  const selectedRows = agencyName
+    ? rows.filter((row) => row.agency_name === agencyName || row.ministry_name === agencyName)
+    : rows;
+  return summarizeRows(selectedRows);
+}
 
 async function fetchProjectSummary(projectId: number): Promise<CompareSummary | null> {
   const supabase = getSupabase();
@@ -29,7 +61,7 @@ async function fetchProjectSummary(projectId: number): Promise<CompareSummary | 
     .from('project')
     .select('project_id, project_name, organization_id, budget_year, initial_budget_total, adjustment_total, carryover_from_previous_total, contingency_total')
     .eq('project_id', projectId)
-    .eq('budget_year', 2024);
+    .eq('budget_year', BUDGET_YEAR.CURRENT);
   if (projectErr) throw projectErr;
   const projectRows = (projectRowsRaw ?? []) as Array<{
     project_id: number;
@@ -44,7 +76,7 @@ async function fetchProjectSummary(projectId: number): Promise<CompareSummary | 
   if (!projectRows.length) return null;
 
   const project = projectRows[0];
-  const budgetYear = project.budget_year ?? 2024;
+  const budgetYear = project.budget_year ?? BUDGET_YEAR.CURRENT;
 
   const { data: blockRowsRaw, error: blockErr } = await supabase
     .from('project_spending_block')
@@ -64,7 +96,8 @@ async function fetchProjectSummary(projectId: number): Promise<CompareSummary | 
     const { data: spendingRaw, error: spendingErr } = await supabase
       .from('project_spending')
       .select('block_id, amount')
-      .in('block_id', blockIds);
+      .in('block_id', blockIds)
+      .eq('budget_year', budgetYear);
     if (spendingErr) throw spendingErr;
     spendingRows = (spendingRaw ?? []) as Array<{ block_id: number; amount: number | null }>;
   }
@@ -91,11 +124,12 @@ async function fetchProjectSummary(projectId: number): Promise<CompareSummary | 
     .slice(0, 8);
 
   if (total <= 0) {
-    total =
-      Number(project.initial_budget_total ?? 0) +
-      Number(project.adjustment_total ?? 0) +
-      Number(project.carryover_from_previous_total ?? 0) +
-      Number(project.contingency_total ?? 0);
+    total = calculateTotalBudget({
+      initial: project.initial_budget_total,
+      adjustment: project.adjustment_total,
+      carryover: project.carryover_from_previous_total,
+      contingency: project.contingency_total,
+    });
   }
 
   const label = project.project_name || `プロジェクトID ${projectId}`;
@@ -110,33 +144,13 @@ async function fetchProjectSummary(projectId: number): Promise<CompareSummary | 
 
 export async function fetchCompareSummary(input: { type: 'agency'; value: string } | { type: 'project'; projectId: number }): Promise<CompareSummary | null> {
   if (input.type === 'agency') {
-    const rows = await fetchMainData();
-    if (!rows.length) return null;
     const { value } = input;
-    const filtered = rows.filter((r: any) => r.agency_name === value || r.ministry_name === value);
-    if (!filtered.length) return null;
-
-    const total = filtered.reduce((sum: number, row: any) => sum + Number(row.total_budget || 0), 0);
-    const projectIds = new Set<number>();
-    filtered.forEach((r: any) => {
-      if (typeof r.project_id === 'number') projectIds.add(r.project_id);
-    });
-    const projectCount = projectIds.size || filtered.length;
-    const firstLevelMap = new Map<string, number>();
-    filtered.forEach((row: any) => {
-      const key = row.bureau_agency || 'その他';
-      firstLevelMap.set(key, (firstLevelMap.get(key) || 0) + Number(row.total_budget || 0));
-    });
-    const firstLevel = Array.from(firstLevelMap.entries())
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 8);
+    const summary = await fetchAgencyBudgetSummary(value);
+    if (summary.projectCount === 0) return null;
 
     return {
       target: { type: 'agency', value, label: value },
-      total,
-      projectCount,
-      firstLevel,
+      ...summary,
     };
   }
 

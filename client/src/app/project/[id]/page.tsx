@@ -1,17 +1,10 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import Money from '@/components/common/Money';
 import { formatCountJa } from '@/utils/format';
-
-type ProjectDetail = {
-  id: string;
-  overview: any;
-  policies: any[];
-  subsidies: any[];
-  related: any[];
-  kpis: Array<{ type: string; label: string; unit: string; unit_disp?: string; unit_kind?: 'yen'|'percent'|'count'|'other'; direction: string; series: { year: number; value: number }[] }>
-};
+import { useApiData } from '@/hooks/useApiData';
+import type { ProjectDetail } from '@/modules/catalog/domain/models';
 
 const Bar: React.FC<{ value: number; max: number; color?: string }> = ({ value, max, color = '#07796b' }) => (
   <div style={{ background: '#e2f6f2', height: 8, borderRadius: 999 }}>
@@ -65,21 +58,13 @@ const Histogram: React.FC<{ points: { year: number; value: number }[]; max?: num
 
 const ProjectPage: React.FC<{ params: { id: string } }> = ({ params }) => {
   const { id } = params;
-  const [data, setData] = useState<ProjectDetail | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch(`/api/project/${encodeURIComponent(id)}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
-        setData(json);
-      } catch (e: any) { setError(e.message); }
-    })();
-  }, [id]);
+  const { data, error, loading } = useApiData<ProjectDetail>(
+    `/api/project/${encodeURIComponent(id)}`,
+    '事業データの取得に失敗しました',
+  );
 
   if (error) return <div style={{ padding: 16, color: 'crimson' }}>エラー: {error}</div>;
-  if (!data) return <div style={{ padding: 16 }}>読み込み中...</div>;
+  if (loading || !data) return <div style={{ padding: 16 }}>読み込み中...</div>;
 
   const ov = data.overview || {};
   const title = ov['事業名'] || `事業 ${id}`;

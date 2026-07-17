@@ -1,36 +1,39 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ZAIMYAKU client
 
-## Getting Started
+政府予算データを組織階層・事業・支出先から探索する Next.js アプリです。
 
-First, run the development server:
+## 開発
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+本番ビルドと型チェック:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm test
+npm run typecheck
+npm run build
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Supabase を利用する API の実行には `SUPABASE_URL` と `SUPABASE_ANON_KEY` が必要です。セマンティック事業検索には追加で `OPENAI_API_KEY` を設定します。
 
-## Learn More
+## グラフ描画
 
-To learn more about Next.js, take a look at the following resources:
+- `src/features/graph/buildGraph.ts`: 生データから階層グラフを構築し、接続を保ったまま表示ノード数を制限
+- `src/components/graph/ForceGraph.tsx`: D3 force simulation、ズーム、ドラッグ、ハイライト
+- `src/components/graph/LazyForceGraph.tsx`: 省庁別プレビューを表示直前まで遅延生成
+- `src/features/graph/hooks/useGraphData.ts`: メイン／サブグラフ API とグラフ構築を接続
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+サブグラフの支出明細は初期ペイロードに含めず、事業ノードを選択した時だけ `/api/project_spending` から取得します。
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## モジュール境界
 
-## Deploy on Vercel
+`src/modules/` は読み取りユースケースを軽量 DDD の依存方向で分離します。
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- `domain/`: 予算計算、組織パス、KPI 単位などの純粋なドメイン処理とモデル
+- `application/`: Repository Port と、画面・API から呼ばれるユースケース
+- `infrastructure/`: Supabase や CSV を使う Repository Adapter
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+依存方向は `infrastructure -> application -> domain` とし、`domain` から Next.js、Supabase、D3、ファイルシステムへ依存させません。`src/server/` は既存 API 向けのキャッシュ付きファサードとして段階的に縮小します。

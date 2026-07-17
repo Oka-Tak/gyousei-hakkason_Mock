@@ -1,5 +1,5 @@
 import { getSupabase } from './supabaseClient';
-import { QUERY_LIMITS } from './constants';
+import { BUDGET_YEAR, QUERY_LIMITS } from './constants';
 
 type SpendingBlockRow = {
   block_id: number;
@@ -18,7 +18,8 @@ export async function fetchSpendingByProject(projectId: string): Promise<Spendin
   const { data: blocks, error: bError } = await supabase
     .from('project_spending_block')
     .select('block_id')
-    .eq('project_id', projectId);
+    .eq('project_id', projectId)
+    .eq('budget_year', BUDGET_YEAR.CURRENT);
   if (bError) throw bError;
   const blockRows = (blocks || []) as SpendingBlockRow[];
   const blockIds = blockRows.map((b) => b.block_id);
@@ -29,8 +30,8 @@ export async function fetchSpendingByProject(projectId: string): Promise<Spendin
     .from('project_spending')
     .select('block_id, recipient_name, corporate_number, amount')
     .in('block_id', blockIds)
+    .eq('budget_year', BUDGET_YEAR.CURRENT)
     .limit(QUERY_LIMITS.SPENDING_BY_PROJECT);
   if (sError) throw sError;
   return (spendings || []) as SpendingRow[];
 }
-

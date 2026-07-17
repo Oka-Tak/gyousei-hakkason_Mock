@@ -1,179 +1,169 @@
 import { z } from 'zod';
 import { getSupabase } from './supabaseClient';
+import { BUDGET_YEAR, CACHE_TTL } from './constants';
 import { RawProjectDataSchema } from '@/types/schemas';
+import type { RawProjectData } from '@/types';
+import {
+  matchesOrganizationPath,
+  parseOrganizationNodeId,
+  type OrganizationHierarchy,
+} from '@/modules/budget/domain/organizationPath';
 
 type AgencyRow = {
   agency_id: string;
   agency_name: string | null;
   agency_order: number | null;
-  [key: string]: any;
+  ministry_name: string | null;
 };
 
 type OrganizationRow = {
   organization_id: string;
   agency_id: string | null;
-  bureau_office?: string | null;
-  department?: string | null;
-  division?: string | null;
-  unit?: string | null;
-  section?: string | null;
-  group?: string | null;
-  team?: string | null;
-  [key: string]: any;
+  bureau_office: string | null;
+  department: string | null;
+  division: string | null;
+  unit: string | null;
+  section: string | null;
+  group: string | null;
+  team: string | null;
 };
 
 type ProjectRow = {
   project_id: number;
+  project_name: string | null;
   organization_id: string | null;
   budget_year: number | null;
   initial_budget_total: number | null;
-  [key: string]: any;
 };
 
-type SpendingBlockRow = {
-  block_id: number;
-  project_id: number;
-  block_total_amount?: number | null;
-  [key: string]: any;
-};
+type CacheEntry = { at: number; data: RawProjectData[] };
 
-type SpendingRow = {
-  block_id: number;
-  recipient_name: string;
-  corporate_number: string | null;
-  amount: number | null;
-  [key: string]: any;
-};
-
-// Cache per nodeId + limit to speed up repeated requests
-const SUBGRAPH_TTL_MS = Number(process.env.SUBGRAPH_TTL_MS || 5 * 60 * 1000);
-type CacheKey = string; // `${nodeId}::${limit}`
-let subgraphCache = new Map<CacheKey, { at: number; data: any[] }>();
-
-const ORG_FIELD_ORDER = ['bureau_office', 'department', 'division', 'unit', 'section', 'group', 'team'] as const;
 const PROJECT_LIMIT_DEFAULT = 600;
+const MAX_CACHE_ENTRIES = 100;
+const subgraphCache = new Map<string, CacheEntry>();
+const requestsInFlight = new Map<string, Promise<RawProjectData[]>>();
 
-export async function fetchSubgraph(nodeId: string, opts?: { projectLimit?: number }) {
+function toOrganizationHierarchy(row: OrganizationRow): OrganizationHierarchy {
+  return {
+    bureau: row.bureau_office,
+    department: row.department,
+    division: row.division,
+    office: row.unit,
+    section: row.section,
+    group: row.group,
+    team: row.team,
+  };
+}
+
+async function findAgencies(topLevel: string): Promise<AgencyRow[]> {
   const supabase = getSupabase();
-  const decoded = decodeURIComponent(nodeId);
-  const parts = decoded.split('→').filter(Boolean);
-  const topLevelOrg = parts[0];
-  const tail = parts.slice(1); // hierarchy under agency
-  const projectLimit = opts?.projectLimit ?? PROJECT_LIMIT_DEFAULT;
-
-  // Cache check
-  const cacheKey: CacheKey = `${decoded}::${projectLimit}`;
-  const cached = subgraphCache.get(cacheKey);
-  const now = Date.now();
-  if (cached && now - cached.at < SUBGRAPH_TTL_MS) {
-    return cached.data;
-  }
-
-  // 1) resolve agency
-  const { data: agencies, error: agencyError } = await supabase
+  const selection = 'agency_id, agency_name, agency_order, ministry_name';
+  const byAgency = await supabase
     .from('agency')
-    .select('agency_id, agency_name, agency_order')
-    .eq('agency_name', topLevelOrg);
-  if (agencyError) throw agencyError;
-  const agencyRows = (agencies ?? []) as AgencyRow[];
-  if (!agencyRows.length) return [];
-  const agencyIds = agencyRows.map(a => a.agency_id);
+    .select(selection)
+    .eq('agency_name', topLevel);
+  if (byAgency.error) throw byAgency.error;
+  if (byAgency.data?.length) return byAgency.data as AgencyRow[];
 
-  // 2) filter organizations by tail path
-  let orgQuery = supabase
+  const byMinistry = await supabase
+    .from('agency')
+    .select(selection)
+    .eq('ministry_name', topLevel);
+  if (byMinistry.error) throw byMinistry.error;
+  return (byMinistry.data ?? []) as AgencyRow[];
+}
+
+async function loadSubgraph(nodeId: string, projectLimit: number): Promise<RawProjectData[]> {
+  const nodeReference = parseOrganizationNodeId(nodeId);
+  if (!nodeReference) return [];
+
+  const agencyRows = await findAgencies(nodeReference.topLevel);
+  if (agencyRows.length === 0) return [];
+
+  const agencyIds = agencyRows.map((agency) => agency.agency_id);
+  const { data: organizations, error: organizationError } = await getSupabase()
     .from('organization')
-    .select('organization_id, agency_id, bureau_office, department, division, unit, section, team')
+    .select('organization_id, agency_id, bureau_office, department, division, unit, section, group, team')
     .in('agency_id', agencyIds);
-  for (let i = 0; i < tail.length && i < ORG_FIELD_ORDER.length; i++) {
-    const value = tail[i];
-    const field = ORG_FIELD_ORDER[i];
-    if (value) orgQuery = orgQuery.eq(field, value);
-  }
-  const { data: organizations, error: orgError } = await orgQuery;
-  if (orgError) throw orgError;
-  const organizationRows = (organizations ?? []) as OrganizationRow[];
-  if (!organizationRows.length) return [];
-  const organizationIds = organizationRows.map(o => o.organization_id);
+  if (organizationError) throw organizationError;
 
-  // 3) projects under those organizations (limit + order)
-  const { data: projects, error: pError } = await supabase
+  // Graph paths omit empty hierarchy levels, so positional database filters can
+  // target the wrong column. Normalize each row before matching the path.
+  const organizationRows = ((organizations ?? []) as OrganizationRow[])
+    .filter((organization) => matchesOrganizationPath(
+      toOrganizationHierarchy(organization),
+      nodeReference.path,
+    ));
+  if (organizationRows.length === 0) return [];
+
+  const organizationIds = organizationRows.map((organization) => organization.organization_id);
+  const { data: projects, error: projectError } = await getSupabase()
     .from('project')
-    .select('project_id, organization_id, budget_year, initial_budget_total')
+    .select('project_id, project_name, organization_id, budget_year, initial_budget_total')
     .in('organization_id', organizationIds)
-    .eq('budget_year', 2024)
+    .eq('budget_year', BUDGET_YEAR.CURRENT)
     .order('initial_budget_total', { ascending: false })
     .limit(projectLimit);
-  if (pError) throw pError;
-  const projectRows = (projects ?? []) as ProjectRow[];
-  if (!projectRows.length) return [];
-  const projectIds = projectRows.map(p => p.project_id);
+  if (projectError) throw projectError;
 
-  // 4) blocks for projects (limit to prevent explosion)
-  const { data: blocks, error: psbError } = await supabase
-    .from('project_spending_block')
-    .select('block_id, project_id, block_total_amount')
-    .in('project_id', projectIds)
-    .limit(3000);
-  if (psbError) throw psbError;
-  const blockRows = (blocks ?? []) as SpendingBlockRow[];
-  const blockIds = blockRows.map(b => b.block_id);
+  const organizationById = new Map(
+    organizationRows.map((organization) => [organization.organization_id, organization]),
+  );
+  const agencyById = new Map(agencyRows.map((agency) => [agency.agency_id, agency]));
 
-  // include spending only if reasonable size
-  const includeSpending = (projects.length <= 400) && (blockIds.length <= 2000);
-  let spendings: any[] = [];
-  if (includeSpending && blockIds.length > 0) {
-    const { data: s, error: sError } = await supabase
-      .from('project_spending')
-      .select('block_id, recipient_name, corporate_number, amount')
-      .in('block_id', blockIds)
-      .limit(5000);
-    if (sError) throw sError;
-    spendings = (s ?? []) as SpendingRow[];
-  }
-
-  // maps
-  const orgMap = new Map<string, OrganizationRow>();
-  organizationRows.forEach(o => orgMap.set(o.organization_id, o));
-  const agencyById = new Map<string, AgencyRow>();
-  agencyRows.forEach(a => agencyById.set(a.agency_id, a));
-  const projectMap = new Map<number, ProjectRow>();
-  projectRows.forEach(p => projectMap.set(p.project_id, p));
-  const spendingByBlock = new Map<number, SpendingRow[]>();
-  spendings.forEach(sp => {
-    const k = sp.block_id;
-    if (!spendingByBlock.has(k)) spendingByBlock.set(k, []);
-    spendingByBlock.get(k)!.push(sp);
-  });
-
-  const merged = blockRows.map((block) => {
-    const proj = projectMap.get(block.project_id);
-    const org = proj && proj.organization_id ? orgMap.get(proj.organization_id) : undefined;
-    const ag = org && org.agency_id ? agencyById.get(org.agency_id) : undefined;
-    const initial_budget_total = block.block_total_amount ?? proj?.initial_budget_total ?? 0;
-    const spending_list = includeSpending ? (spendingByBlock.get(block.block_id) || []) : [];
+  // Spending details are intentionally loaded only after a project is selected.
+  // Keeping them out of the graph payload removes thousands of unused rows.
+  const merged = ((projects ?? []) as ProjectRow[]).map((project) => {
+    const organization = project.organization_id
+      ? organizationById.get(project.organization_id)
+      : undefined;
+    const agency = organization?.agency_id ? agencyById.get(organization.agency_id) : undefined;
     return {
-      ...block,
-      ...proj,
-      agency_id: ag?.agency_id,
-      agency_name: ag?.agency_name,
-      agency_order: ag?.agency_order,
-      ministry_name: ag?.agency_name,
-      bureau_agency: org?.bureau_office,
-      department: org?.department,
-      division: org?.division,
-      office: org?.unit,
-      section: org?.section,
-      team: org?.team,
-      initial_budget_total,
-      spending_list,
+      ...project,
+      agency_name: agency?.agency_name,
+      ministry_name: agency?.ministry_name || agency?.agency_name,
+      bureau_agency: organization?.bureau_office,
+      department: organization?.department,
+      division: organization?.division,
+      office: organization?.unit,
+      section: organization?.section,
+      group: organization?.group,
+      team: organization?.team,
+      spending_list: [],
     };
   });
 
-  const validated = z.array(RawProjectDataSchema).safeParse(merged);
-  if (!validated.success) {
-    throw new Error('Invalid subgraph payload');
+  return z.array(RawProjectDataSchema).parse(merged);
+}
+
+function cacheResult(key: string, data: RawProjectData[]): void {
+  if (subgraphCache.size >= MAX_CACHE_ENTRIES) {
+    const oldestKey = subgraphCache.keys().next().value as string | undefined;
+    if (oldestKey) subgraphCache.delete(oldestKey);
   }
-  const result = validated.data;
-  subgraphCache.set(cacheKey, { at: Date.now(), data: result });
-  return result;
+  subgraphCache.set(key, { at: Date.now(), data });
+}
+
+export async function fetchSubgraph(
+  nodeId: string,
+  options?: { projectLimit?: number },
+): Promise<RawProjectData[]> {
+  const projectLimit = options?.projectLimit ?? PROJECT_LIMIT_DEFAULT;
+  const cacheKey = `${nodeId}::${projectLimit}`;
+  const cached = subgraphCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < CACHE_TTL.SUBGRAPH) return cached.data;
+  if (cached) subgraphCache.delete(cacheKey);
+
+  const pending = requestsInFlight.get(cacheKey);
+  if (pending) return pending;
+
+  const request = loadSubgraph(nodeId, projectLimit);
+  requestsInFlight.set(cacheKey, request);
+  try {
+    const data = await request;
+    cacheResult(cacheKey, data);
+    return data;
+  } finally {
+    requestsInFlight.delete(cacheKey);
+  }
 }

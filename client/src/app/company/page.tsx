@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { useMainGraphData } from '@/features/graph/hooks/useGraphData';
+import { useAgencies } from '@/features/agencies/hooks/useAgencies';
 import Money from '@/components/common/Money';
 import { useToast } from '@/components/common/Toast';
+import { useIsMobile } from '@/hooks/useIsMobile';
 
 type Overview = {
   recipient_name: string;
@@ -26,13 +27,7 @@ type ViewMode = 'search' | 'ranking';
 
 const CompanyPage: React.FC = () => {
   const { showToast } = useToast();
-  const [isMobile, setIsMobile] = useState(false);
-  useEffect(() => {
-    const f = () => setIsMobile(window.innerWidth <= 600);
-    f();
-    window.addEventListener('resize', f);
-    return () => window.removeEventListener('resize', f);
-  }, []);
+  const isMobile = useIsMobile();
 
   const [viewMode, setViewMode] = useState<ViewMode>('search');
 
@@ -73,8 +68,7 @@ const CompanyPage: React.FC = () => {
   }, [searchCompany]);
 
   // === 省庁別ランキングモード ===
-  const { allAgencies } = useMainGraphData([]);
-  const agencies = useMemo(() => allAgencies || [], [allAgencies]);
+  const { agencies } = useAgencies();
 
   const [agency, setAgency] = useState('');
   const [limit, setLimit] = useState(20);

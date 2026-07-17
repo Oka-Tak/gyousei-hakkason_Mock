@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useMainGraphData } from '@/features/graph/hooks/useGraphData';
+import { useAgencies } from '@/features/agencies/hooks/useAgencies';
 import Money from '@/components/common/Money';
+import { useIsMobile } from '@/hooks/useIsMobile';
 
 type CompareType = 'agency' | 'project';
 
@@ -92,16 +93,9 @@ const toggleButtonStyle = (active: boolean): React.CSSProperties => ({
 });
 
 const ComparePage: React.FC = () => {
-  const [isMobile, setIsMobile] = useState(false);
-  useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth <= 600);
-    handler();
-    window.addEventListener('resize', handler);
-    return () => window.removeEventListener('resize', handler);
-  }, []);
+  const isMobile = useIsMobile();
 
-  const { allAgencies } = useMainGraphData([]);
-  const agencies = useMemo(() => allAgencies || [], [allAgencies]);
+  const { agencies } = useAgencies();
 
   const [leftType, setLeftType] = useState<CompareType>('agency');
   const [rightType, setRightType] = useState<CompareType>('agency');

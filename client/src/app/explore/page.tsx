@@ -6,26 +6,15 @@ import ForceGraph from "@/components/graph/ForceGraph";
 import { NODE_SIZE_BY_GROUP } from "@/features/graph/constants";
 import { useMainGraphData } from "@/features/graph/hooks/useGraphData";
 import type { GraphNodeDatum, GraphLinkDatum } from "@/features/graph/types";
+import { useIsMobile } from "@/hooks/useIsMobile";
 
 const ExplorePage: React.FC = () => {
-  const [isMobile, setIsMobile] = useState(false);
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth <= 600);
-    check();
-    window.addEventListener("resize", check);
-    return () => window.removeEventListener("resize", check);
-  }, []);
+  const isMobile = useIsMobile();
 
   // Agencies selection
-  const [selectedAgencies, setSelectedAgencies] = useState<string[]>([]);
+  const [selectedAgencies, setSelectedAgencies] = useState<string[] | null>(null);
   const { nodes, links, colorMap, loading, error, allAgencies } = useMainGraphData(selectedAgencies);
-
-  // Initialize with all agencies
-  useEffect(() => {
-    if (allAgencies && allAgencies.length && selectedAgencies.length === 0) {
-      setSelectedAgencies(allAgencies);
-    }
-  }, [allAgencies, selectedAgencies.length]);
+  const activeAgencies = selectedAgencies ?? allAgencies ?? [];
 
   // Controls: depth and budget threshold
   const [maxDepth, setMaxDepth] = useState(3);
@@ -69,7 +58,7 @@ const ExplorePage: React.FC = () => {
   const { filteredNodes, filteredLinks } = useMemo(() => {
     if (!nodes.length) return { filteredNodes: [] as GraphNodeDatum[], filteredLinks: [] as GraphLinkDatum[] };
     const kept = nodes.filter((n) => {
-      const depth = n.id.split("→").length - 1;
+      const depth = n.depth;
       const keepByDepth = depth <= maxDepth;
       const keepByBudget = (n.value || 0) >= minBudget || depth === 0; // always keep top level
       return keepByDepth && keepByBudget;
@@ -85,8 +74,9 @@ const ExplorePage: React.FC = () => {
   const endSugg = useMemo(() => (endText ? fuse.search(endText).slice(0, 8).map(r => r.item) : []), [fuse, endText]);
 
   // Compute BFS path on demand
-  const computePath = () => {
-    if (!startId || !endId) return;
+  const computePath = (overrideEndId?: string) => {
+    const destinationId = overrideEndId ?? endId;
+    if (!startId || !destinationId) return;
     const adj = new Map<string, string[]>();
     filteredLinks.forEach((l) => {
       const s = l.source.id, t = l.target.id;
@@ -98,21 +88,23 @@ const ExplorePage: React.FC = () => {
     const q: string[] = [startId];
     const prev = new Map<string, string | null>();
     prev.set(startId, null);
-    while (q.length) {
-      const u = q.shift()!;
-      if (u === endId) break;
+    let queueIndex = 0;
+    while (queueIndex < q.length) {
+      const u = q[queueIndex];
+      queueIndex += 1;
+      if (u === destinationId) break;
       const nbrs = adj.get(u) || [];
       for (const v of nbrs) {
         if (!prev.has(v)) { prev.set(v, u); q.push(v); }
       }
     }
-    if (!prev.has(endId)) {
+    if (!prev.has(destinationId)) {
       setHighlightNodeIds([]);
       setHighlightEdges([]);
       return;
     }
     const path: string[] = [];
-    let cur: string | null = endId;
+    let cur: string | null = destinationId;
     while (cur) { path.push(cur); cur = prev.get(cur) ?? null; }
     path.reverse();
     const edges = [] as { sourceId: string; targetId: string }[];
@@ -152,7 +144,7 @@ const ExplorePage: React.FC = () => {
           <span>{formatJPY(minBudget)}</span>
         </div>
         <details>
-          <summary style={{ cursor: 'pointer' }}>省庁選択（{selectedAgencies.length}）</summary>
+          <summary style={{ cursor: 'pointer' }}>省庁選択（{activeAgencies.length}）</summary>
           <div style={{ background: '#fff', border: '1px solid #e5e7eb', padding: 8, borderRadius: 8, maxHeight: 280, overflow: 'auto', minWidth: 220 }}>
             <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
               <button onClick={() => setSelectedAgencies(allAgencies || [])} style={{ fontSize: 12, border: '1px solid #ddd', borderRadius: 6, padding: '4px 8px', background: '#f8fafc', cursor: 'pointer' }}>全選択</button>
@@ -160,9 +152,12 @@ const ExplorePage: React.FC = () => {
             </div>
             {(allAgencies || []).map((a) => (
               <label key={a} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 0' }}>
-                <input type="checkbox" checked={selectedAgencies.includes(a)} onChange={(e) => {
+                <input type="checkbox" checked={activeAgencies.includes(a)} onChange={(e) => {
                   const checked = e.target.checked;
-                  setSelectedAgencies(prev => checked ? Array.from(new Set([...prev, a])) : prev.filter(x => x !== a));
+                  setSelectedAgencies((current) => {
+                    const base = current ?? allAgencies ?? [];
+                    return checked ? Array.from(new Set([...base, a])) : base.filter((item) => item !== a);
+                  });
                 }} />
                 <span>{a}</span>
               </label>
@@ -203,7 +198,7 @@ const ExplorePage: React.FC = () => {
                 </div>
               )}
             </div>
-            <button onClick={computePath} style={{ border: '1px solid #07796b', background: '#07796b', color: '#fff', padding: '8px 10px', borderRadius: 8, cursor: 'pointer' }}>探索</button>
+            <button onClick={() => computePath()} style={{ border: '1px solid #07796b', background: '#07796b', color: '#fff', padding: '8px 10px', borderRadius: 8, cursor: 'pointer' }}>探索</button>
             <button onClick={() => { setStartId(null); setEndId(null); setStartText(""); setEndText(""); setHighlightEdges([]); setHighlightNodeIds([]); }} style={{ border: '1px solid #ddd', background: '#f8fafc', padding: '8px 10px', borderRadius: 8, cursor: 'pointer' }}>クリア</button>
           </div>
           <div style={{ marginTop: 10, fontSize: 12, color: '#64748b' }}>グラフ上のノードをクリックすると、未設定の開始/終了に自動でセットします。</div>
@@ -242,7 +237,7 @@ const ExplorePage: React.FC = () => {
           highlightEdges={highlightEdges}
           onNodeClick={(d) => {
             if (!startId) { setStartId(d.id); setStartText(d.name); return; }
-            if (!endId) { setEndId(d.id); setEndText(d.name); setTimeout(computePath, 0); return; }
+            if (!endId) { setEndId(d.id); setEndText(d.name); computePath(d.id); return; }
             // if both already set, navigate to subgraph as a convenience
             window.location.href = `/subgraph?node=${encodeURIComponent(d.id)}`;
           }}

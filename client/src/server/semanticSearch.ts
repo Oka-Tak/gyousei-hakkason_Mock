@@ -28,6 +28,13 @@ type MatchRow = {
   surface?: string | null;
   synonyms?: string[] | null;
   keywords?: string[] | null;
+  distance?: number | string | null;
+  metric?: number | string | null;
+};
+
+type ProjectNameRow = {
+  project_id: number;
+  project_name: string | null;
 };
 
 export type ProjectSemanticMatch = {
@@ -91,7 +98,7 @@ function calculateScore(row: MatchRow): number {
     if (similarity >= 0 && similarity <= 1) return similarity;
     if (similarity > 1) return 1 / (1 + similarity);
   }
-  const distance = toNumber((row as any).distance ?? (row as any).metric);
+  const distance = toNumber(row.distance ?? row.metric);
   if (distance !== null) {
     const normalized = 1 - Math.min(Math.max(distance, 0), 1);
     return normalized;
@@ -222,7 +229,7 @@ export async function searchProjectsSemantically(input: { query: string; limit?:
     // fallback to simple contains search when embeddings yield nothing
     const fallbackResults = await fallbackProjectSearch(trimmed, Math.min(Math.max(limit, 1), QUERY_LIMITS.SEMANTIC_SEARCH_MAX));
     if (fallbackResults.length) return fallbackResults;
-    return [] as ProjectSemanticMatch[];
+    return [];
   }
 
   const budgetYears = new Set(rows.map(r => r.budget_year));
@@ -242,10 +249,10 @@ export async function searchProjectsSemantically(input: { query: string; limit?:
 
     const { data: projectRows, error: projectErr } = await projectQuery;
     if (projectErr) throw projectErr;
-    (projectRows ?? []).forEach((p: any) => {
-      const pid = Number(p.project_id);
+    ((projectRows ?? []) as ProjectNameRow[]).forEach((project) => {
+      const pid = Number(project.project_id);
       if (!Number.isFinite(pid)) return;
-      const name = (p.project_name as string | null) ?? '';
+      const name = project.project_name ?? '';
       if (name) projectNameById.set(pid, name);
     });
   }
